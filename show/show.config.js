@@ -41,6 +41,8 @@ module.exports = {
   calendarId: "",                        // TODO public Google Calendar ID (…@group.calendar.google.com)
   musicFolderUrl: "",                    // TODO Drive music folder share link
   youtubePlaylistId: "",                 // optional YouTube playlist ID
+  videosPlaylistId: "",                  // optional YouTube playlist for the Choreography Vault (must be Public or Unlisted)
+  videosPlaylistTitle: "",               // optional title for the Choreography Vault embed
   analyticsId: "",                       // optional Google Analytics 4 ID (G-…); "" turns analytics off
 
   // Shown on the music page if the Drive folder can't be loaded. Usually [].

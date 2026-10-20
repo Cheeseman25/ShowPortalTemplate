@@ -1,9 +1,9 @@
 // #videos: placeholder for choreography and blocking videos.
 
-import { SHOW } from "../config";
+import { SHOW, YOUTUBE_CHOREO_PLAYLIST_ID } from "../config";
 
 export function VideosTab({ ctx }) {
-  const { activeTab, rehearsals } = ctx;
+  const { activeTab } = ctx;
 
   return (
     <>
@@ -21,6 +21,23 @@ export function VideosTab({ ctx }) {
             </div>
           </div>
 
+          {YOUTUBE_CHOREO_PLAYLIST_ID ? (
+            <div className="glass-card rounded-3xl overflow-hidden p-3 md:p-5 border border-primary-500/20 shadow-2xl">
+              <div className="aspect-video w-full rounded-2xl overflow-hidden bg-slate-950 shadow-inner">
+                <iframe
+                  className="w-full h-full"
+                  src={`https://www.youtube-nocookie.com/embed/videoseries?list=${YOUTUBE_CHOREO_PLAYLIST_ID}`}
+                  title={SHOW.videosPlaylistTitle || "Choreography videos"}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                ></iframe>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-3 text-center">
+                Videos are pulled live from the YouTube playlist. Use the playlist controls to pick a video.
+              </p>
+            </div>
+          ) : (
           <div className="glass-card p-12 text-center rounded-3xl border border-primary-500/20">
             <div className="w-16 h-16 bg-primary-950 border border-primary-800 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4">
               🎬
@@ -36,6 +53,7 @@ export function VideosTab({ ctx }) {
               )}
             </p>
           </div>
+          )}
         </div>
       )}
     </>
