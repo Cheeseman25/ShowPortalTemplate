@@ -2,6 +2,13 @@
 
 Read `primer.md` first: architecture, pages, settings, backend API and workflow.
 
+## Before editing: start from the latest GitHub copy
+
+GitHub `main` is the source of truth. At the start of every task, before changing anything:
+1. `git fetch` + fast-forward to `origin/main` in the clone being edited (both repos when the engine is involved).
+2. Check the Mac copy (`~/Development/FrozenJR2026`, via the device shell) for uncommitted or unpushed work. If there is any, ask the user before doing anything else; never overwrite it.
+3. Only then edit.
+
 ## Keep the engine in sync (Frozen ⇄ template)
 
 Engine changes are made in BOTH repos in the same session, as separate commits:
