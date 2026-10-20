@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{pageTitle}}</title>
+  
+  <!-- Favicon: the show icon emoji (inline SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>{{icon}}</text></svg>" />
+
+  <!--ANALYTICS-->
+
+  <!-- Google Translate Engine -->
+  <script type="text/javascript">
+    function googleTranslateElementInit() {
+      new google.translate.TranslateElement({
+        pageLanguage: '{{siteLanguage}}',
+        includedLanguages: '{{languageCodes}}',
+        autoDisplay: false
+      }, 'google_translate_element');
+    }
+  </script>
+  <script type="text/javascript" src="https://translate.google.com/translate_a/element.js?cb=googleTranslateElementInit"></script>
+
+  <!--TAILWIND-->
+
+  <!-- React 18 (UMD build; the app bundle uses the global React/ReactDOM) -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+
+  <!-- Canvas Confetti for Fanfare Effect -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.browser.min.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&amp;family=Nunito:wght@400;600;700;800&amp;family=Montserrat:wght@800;900&amp;display=swap" />
+  <!--STYLES-->
+</head>
+<body class="selection:bg-primary-500 selection:text-white pb-20">
+  <canvas id="bg-canvas"></canvas>
+  <div id="google_translate_element"></div>
+  <div id="root"></div>
+
+  <!--APP-->
+</body>
+</html>

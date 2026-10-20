@@ -1,0 +1,78 @@
+/* Custom site styles + Tailwind. Colors come from the show theme via theme(). */
+body {
+  font-family: 'Nunito', sans-serif;
+  background: radial-gradient(circle at 50% 0%, theme('colors.page.top') 0%, theme('colors.page.bottom') 100%);
+  color: #f1f5f9;
+  min-height: 100vh;
+  top: 0px !important;
+  overflow-x: hidden;
+}
+.font-cinzel { font-family: 'Cinzel', serif; }
+
+#bg-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 0;
+}
+
+#root {
+  position: relative;
+  z-index: 10;
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.78);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid theme('colors.accent.400 / 20%');
+}
+.glass-card-active {
+  border-color: theme('colors.accent.400 / 55%');
+  box-shadow: 0 0 25px theme('colors.accent.400 / 15%');
+}
+.celebration-border {
+  background: linear-gradient(135deg, theme('colors.accent.400'), #818cf8, #c084fc, theme('colors.accent.400'));
+  background-size: 300% 300%;
+  animation: gradientShift 6s ease infinite;
+}
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: theme('colors.accent.950'); }
+::-webkit-scrollbar-thumb { background: theme('colors.accent.600'); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: theme('colors.accent.400'); }
+
+.goog-te-banner-frame.skiptranslate, 
+.goog-te-banner-frame, 
+iframe.goog-te-banner-frame,
+.goog-te-balloon-frame {
+  display: none !important;
+  visibility: hidden !important;
+  height: 0 !important;
+}
+body {
+  top: 0px !important;
+  position: static !important;
+}
+.skiptranslate iframe {
+  display: none !important;
+}
+#google_translate_element {
+  position: absolute;
+  top: -9999px;
+  left: -9999px;
+  visibility: hidden;
+}
+
+/* Tailwind goes AFTER the custom styles on purpose: when an element has both a
+   custom class (e.g. .glass-card) and a Tailwind utility, the utility wins. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
