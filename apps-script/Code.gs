@@ -9,7 +9,7 @@
  *   CALENDAR_ID           public Google Calendar ID (…@group.calendar.google.com)
  *   MUSIC_ROOT_FOLDER_ID  Drive folder ID holding the rehearsal tracks
  *
- * VERSION 3 (2026-10-21): Time split into StartTime/EndTime; calendar sync (calendarSync.gs VERSION 3).
+ * VERSION 4 (2026-10-21): call prompt for unmatched calls; Time split into StartTime/EndTime; calendar sync (calendarSync.gs VERSION 3).
  *
  * First time: run setupSheets() once from the editor to create the tabs.
  */
@@ -116,6 +116,10 @@ function doPost(e) {
       response = setRehearsalArchivedStatus(data.id, true);
     } else if (data.action === "unarchive") {
       response = setRehearsalArchivedStatus(data.id, false);
+    } else if (data.action === "calendarAttach") {
+      response = resolveCallChoice(data.id, "attach", data.eventId);
+    } else if (data.action === "calendarCreate") {
+      response = resolveCallChoice(data.id, "create", null);
     } else {
       response = { status: "error", message: "Unknown post action: " + data.action };
     }
@@ -220,9 +224,10 @@ function saveRehearsalCall(item) {
     sheet.appendRow(rowData);
   }
 
-  try { syncRehearsalById(rowData[0]); } catch (err) { Logger.log("calendar sync: " + err); }
+  var syncResult = null;
+  try { syncResult = syncRehearsalById(rowData[0]); } catch (err) { Logger.log("calendar sync: " + err); }
 
-  return { status: "success", id: rowData[0] };
+  return { status: "success", id: rowData[0], sync: syncResult };
 }
 
 /**

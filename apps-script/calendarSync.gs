@@ -1,5 +1,5 @@
 /**
- * calendarSync.gs  VERSION 3 (2026-10-21, branch calendar-sync)
+ * calendarSync.gs  VERSION 4 (2026-10-21, branch calendar-sync)
  * STAGED; not deployed or tested in Apps Script yet.
  *
  * Writes call board details into EXISTING calendar events.
@@ -31,6 +31,49 @@ function syncRehearsalById(id) {
   var hit = getRehearsalCalls().filter(function(r) { return String(r.id) === String(id); });
   if (hit.length === 0) return { status: "error", message: "call not found: " + id };
   return syncDate_(hit[0].date);
+}
+
+/**
+ * Called from the app after the user answers the prompt.
+ *   choice = "attach": attach this call to eventId (an existing event on that date)
+ *   choice = "create": create a new calendar event for this call's time
+ */
+function resolveCallChoice(id, choice, eventId) {
+  var hit = getRehearsalCalls().filter(function(r) { return String(r.id) === String(id); });
+  if (hit.length === 0) return { status: "error", message: "call not found: " + id };
+  var call = hit[0];
+  var day = dateAtMidnight_(call.date);
+  var w = callWindow_(call, day);
+  if (!w) return { status: "error", message: "time could not be read for this call" };
+
+  try {
+    var cal = CalendarApp.getCalendarById(getSetting("CALENDAR_ID"));
+    if (choice === "attach") {
+      var ev = cal.getEventById(eventId);
+      if (!ev) return { status: "error", message: "event not found" };
+      // Rebuild the event's text from every active call that overlaps it, plus this call.
+      var active = [];
+      getRehearsalCalls().forEach(function(r) {
+        if (r.date !== call.date || r.isArchived) return;
+        var cw = callWindow_(r, day);
+        if (cw && (String(r.id) === String(id) || overlaps_(cw.start, cw.end, ev.getStartTime(), ev.getEndTime()))) active.push(cw);
+      });
+      active.sort(function(a, b) { return a.start - b.start; });
+      ev.setDescription(buildDescription_(active));
+      var locs = uniq_(active.map(function(x) { return x.call.location; }).filter(Boolean));
+      if (locs.length === 1) ev.setLocation(locs[0]);
+      return { status: "success", action: "attached", event: ev.getTitle() };
+    }
+    if (choice === "create") {
+      var created = cal.createEvent(cleanTitle_(call.title), w.start, w.end,
+                                    { location: call.location || "", description: buildDescription_([w]) });
+      return { status: "success", action: "created", event: created.getTitle() };
+    }
+    return { status: "error", message: "unknown choice: " + choice };
+  } catch (err) {
+    Logger.log("resolveCallChoice error: " + err);
+    return { status: "error", message: String(err) };
+  }
 }
 
 /** Manual run: re-syncs every date on the call board. Run once after deploying. */
@@ -88,13 +131,26 @@ function syncDate_(dateStr) {
       }
     });
 
+    var unmatched = [];
     active.forEach(function(w) {
       var hit = events.some(function(ev) { return overlaps_(w.start, w.end, ev.getStartTime(), ev.getEndTime()); });
-      if (!hit) report.push("NO MATCHING EVENT, not created: " + w.call.id + " \"" + w.call.title +
-                            "\" " + fmtTime_(w.start) + "–" + fmtTime_(w.end));
+      if (!hit) {
+        report.push("NO MATCHING EVENT, not created: " + w.call.id + " \"" + w.call.title +
+                    "\" " + fmtTime_(w.start) + "–" + fmtTime_(w.end));
+        unmatched.push({ id: String(w.call.id), title: cleanTitle_(w.call.title),
+                         startLabel: fmtTime_(w.start), endLabel: fmtTime_(w.end) });
+      }
     });
 
-    return { status: "success", report: report };
+    return {
+      status: "success",
+      report: report,
+      unmatched: unmatched,
+      events: unmatched.length ? events.map(function(ev) {
+        return { id: ev.getId(), title: ev.getTitle(),
+                 timeLabel: fmtTime_(ev.getStartTime()) + "–" + fmtTime_(ev.getEndTime()) };
+      }) : []
+    };
   } catch (err) {
     Logger.log("calendarSync error for " + dateStr + ": " + err);
     return { status: "error", message: String(err) };
