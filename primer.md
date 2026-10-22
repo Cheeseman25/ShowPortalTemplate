@@ -44,10 +44,13 @@ Fallback: cast also loads from a published-to-web CSV of the Cast tab (castCsvUr
 | `src/effects/` | Page background effects (`snow.js`). Add new ones here and select them with `background`. |
 | `src/components/` | `Header`, `NavBar` (breadcrumb + tabs), `Footer`, `CallCard` (`renderCallCard(reh, isArchived, ctx)`). |
 | `src/tabs/` | One file per route; each renders only when its tab is active. |
-| `src/modals/` | `CalendarEventModal`, `CelebrationModal`, `LoginModal`, `EditCallModal`. |
+| `src/modals/` | `CalendarEventModal`, `CelebrationModal`, `LoginModal`, `EditCallModal` (call form), `CalendarChoiceModal` (attach-or-create prompt after a save). |
+| `src/components/PickerInput.jsx` | Date/time input with a light drawn icon; the browser's dark icon is hidden in `styles.css`. |
+| `src/lib/callTimes.js` | Time helpers for the call form (`to24`, `fromTimeInput`, `splitLegacyTime`, `timeRangeLabel`). |
 | `src/styles.css` | Custom CSS (colors via Tailwind `theme()`), then the Tailwind directives. Tailwind must stay **after** the custom CSS so utilities override custom classes like `.glass-card`. |
 | `tailwind.config.js` | Maps `primary`, `accent`, `page` colors from the show theme. Use `primary-*` / `accent-*` classes, never hardcoded palette names, for themed elements. |
-| `apps-script/Code.gs` | Backend script (no secrets; settings in Script Properties). Pasted into the Sheet's Apps Script editor; it is not deployed from the repo. |
+| `apps-script/Code.gs` | Backend script, **VERSION 4** (no secrets; settings in Script Properties). Pasted into the Sheet's Apps Script editor; it is not deployed from the repo. |
+| `apps-script/calendarSync.gs` | Calendar sync module, **VERSION 4**. Writes call details into existing calendar events by time overlap; never creates events from a save. Paste as a second file in the same Apps Script project. |
 | `scripts/build.mjs` | Build (`--cdn-css` = preview build using the Tailwind CDN instead of the CLI). |
 | `.github/workflows/deploy.yml` | Build + deploy. |
 
@@ -114,7 +117,7 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 
 ## Backend API (Apps Script)
 
-Tab names are in `CONFIG` (`Rehearsals`, `Cast`). Per-show values are **Script Properties**, not code: `ADMIN_PIN` (no PIN set = edits locked), `CALENDAR_ID`, `MUSIC_ROOT_FOLDER_ID`. `setupSheets()` creates both tabs with headers.
+Tab names are in `CONFIG` (`Rehearsals`, `Cast`). Per-show values are **Script Properties**, not code: `ADMIN_PIN` (no PIN set = edits locked), `CALENDAR_ID`, `MUSIC_ROOT_FOLDER_ID`. `setupSheets()` creates both tabs with headers. Calendar sync reads `CALENDAR_ID` the same way.
 
 **GET** `CALLBOARD_BACKEND_URL?action=…` (frontend adds `&t=<timestamp>` cache-buster)
 | action | Returns |
@@ -128,11 +131,13 @@ Tab names are in `CONFIG` (`Rehearsals`, `Cast`). Per-show values are **Script P
 | action | Body | Effect |
 |---|---|---|
 | `verifyPin` | `{pin}` | success/error |
-| `save` | `{pin, item}` | Upsert row in Rehearsals by ID (new ID = `reh-<ms>`) |
+| `save` | `{pin, item}` | Upsert row in Rehearsals by ID (new ID = `reh-<ms>`). Returns `{status, id, sync}`; `sync.unmatched` lists active calls with no matching calendar event and `sync.events` the day's events, for the app's prompt |
+| `calendarAttach` | `{pin, id, eventId}` | Attaches the call to an existing event on its date. Event time is not changed |
+| `calendarCreate` | `{pin, id}` | Creates a calendar event for the call's time |
 | `archive` / `delete` | `{pin, id}` | Sets IsArchived (col 10) TRUE — never deletes rows |
 | `unarchive` | `{pin, id}` | Sets IsArchived FALSE |
 
-Rehearsals sheet columns: `ID, Title, Date, Time, Location, Type, CalledRoles, FocusScenes, Notes, IsArchived` (lists stored comma-separated; called performers stored as `"Name (Role)"`).
+Rehearsals sheet columns: `ID, Title, Date, StartTime, EndTime, Location, Type, CalledRoles, FocusScenes, Notes, IsArchived` (values like `5:30 PM`; lists stored comma-separated; called performers stored as `"Name (Role)"`). Saves write these by position; the archive column is found by header name. Adding or reordering columns needs a matching backend change. Run `setupSheets()` only on a fresh sheet; an existing one needs its header row updated by hand.
 
 **Deploying backend changes:** edit in the Apps Script editor → Deploy → Manage deployments → edit the existing deployment → New version. That keeps the same `/exec` URL. Creating a *new* deployment changes the URL and requires updating `backendUrl` in the show settings.
 
@@ -154,7 +159,7 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - **Copy** (engine, identical in both): `src/`, `scripts/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`.
 - **Never copy** (per show): `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
 - **New setting:** add it to the engine with a safe default for blank values, then add it to the template's blank `show/show.config.js` (commented) as well as Frozen's.
-- **Backend:** the template's `apps-script/Code.gs` is the generic version (settings in Script Properties). Port backend logic changes to it; Frozen's own script is local only (git-ignored, contains its PIN).
+- **Backend:** the template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). Port backend logic changes to them; Frozen's own script is local only (git-ignored, contains its PIN).
 - After copying, `diff -r` the engine paths between the two repos; the only expected difference is none.
 - A settings-only change (new call type, colors, text) stays in the one show.
 
@@ -163,6 +168,7 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - Show-specific change → `show/show.config.js` or `public/`. Engine change → `src/`, and make it in the template too.
 - Adding state or a handler a section needs: declare it in `App.jsx`, add it to `ctx`, destructure it in the section. A missing name is silently `undefined`; type-check or click through to catch it.
 - Never edit `dist/` (generated, git-ignored).
-- Backend changes: edit `apps-script/Code.gs`; the user pastes it into the Apps Script editor and deploys a **new version of the existing deployment** (keeps the URL).
+- Backend changes: edit `apps-script/Code.gs` and `apps-script/calendarSync.gs`; the user pastes them into the Apps Script editor and deploys a **new version of the existing deployment** (keeps the URL).
+- **Cloud sessions:** GitHub is the source of truth. Attach this repo, read this file, and work from a clone. Device-shell (Mac) access is only available when a session is linked to the Mac.
 - The cloud workspace can't reach npm but has esbuild at /opt/npm-tools: symlink `node_modules/esbuild` and `node_modules/@esbuild` to it and run `node scripts/build.mjs --cdn-css` for a preview build. Full builds run in GitHub Actions.
 - Regression check for engine refactors: render old and new builds in headless Chromium (Playwright at /opt/npm-tools, browsers at /opt/pw-browsers) with mocked backend responses, click through every page and modal, and diff `#root` HTML. For styling, compare computed styles in the browser pane against the live site.
