@@ -19,6 +19,7 @@ import { CalendarEventModal } from "./modals/CalendarEventModal";
 import { CelebrationModal } from "./modals/CelebrationModal";
 import { LoginModal } from "./modals/LoginModal";
 import { EditCallModal } from "./modals/EditCallModal";
+import { CalendarChoiceModal } from "./modals/CalendarChoiceModal";
 import { Footer } from "./components/Footer";
 
 const { useState, useEffect, useRef, useMemo } = React;
@@ -127,6 +128,8 @@ export function ProductionApp() {
   }, [folderCategories, musicTabSubView]);
 
   const [isEditingCall, setIsEditingCall] = useState(false);
+  const [pendingCalendarChoice, setPendingCalendarChoice] = useState(null);
+  const [calendarChoiceBusy, setCalendarChoiceBusy] = useState(false);
   const [editCallData, setEditCallData] = useState({
     id: '',
     title: '',
@@ -575,8 +578,46 @@ export function ProductionApp() {
           alert('Save failed: ' + data.message);
         } else {
           trackAnalyticsEvent('publish_rehearsal_call', { title: newEntry.title, isArchived: newEntry.isArchived });
+          // Ask the admin what to do if no calendar event matches this call's time.
+          const sync = data.sync;
+          const unmatched = sync && Array.isArray(sync.unmatched)
+            ? sync.unmatched.find(u => String(u.id) === String(newEntry.id))
+            : null;
+          if (unmatched) {
+            setPendingCalendarChoice({
+              call: unmatched,
+              events: sync.events || [],
+              dateLabel: newEntry.date
+            });
+          }
         }
       } catch (err) {}
+    }
+  };
+
+  const resolveCalendarChoice = async (choice, eventId) => {
+    if (!pendingCalendarChoice || !CALLBOARD_BACKEND_URL) return;
+    setCalendarChoiceBusy(true);
+    try {
+      const body = choice === 'attach'
+        ? { action: 'calendarAttach', pin: adminSessionToken, id: pendingCalendarChoice.call.id, eventId }
+        : { action: 'calendarCreate', pin: adminSessionToken, id: pendingCalendarChoice.call.id };
+      const res = await fetch(CALLBOARD_BACKEND_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+      const data = await res.json();
+      if (data.status === 'error') {
+        alert('Calendar update failed: ' + data.message);
+      } else {
+        alert(choice === 'attach' ? 'Attached to the calendar event.' : 'New calendar invite created.');
+        setPendingCalendarChoice(null);
+      }
+    } catch (err) {
+      alert('Calendar update failed: ' + err);
+    } finally {
+      setCalendarChoiceBusy(false);
     }
   };
 
@@ -769,6 +810,13 @@ export function ProductionApp() {
         <CelebrationModal ctx={ctx} />
         <LoginModal ctx={ctx} />
         <EditCallModal ctx={ctx} />
+        <CalendarChoiceModal
+          pending={pendingCalendarChoice}
+          busy={calendarChoiceBusy}
+          onAttach={(eventId) => resolveCalendarChoice('attach', eventId)}
+          onCreate={() => resolveCalendarChoice('create')}
+          onClose={() => setPendingCalendarChoice(null)}
+        />
         <Footer ctx={ctx} />
       </div>
   );
