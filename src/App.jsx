@@ -3,6 +3,7 @@ import { SHOW, CALLBOARD_BACKEND_URL, DIRECT_CAST_CSV_URL, FALLBACK_TRACKS, INIT
 import { startSnow } from "./effects/snow";
 import { trackAnalyticsEvent } from "./lib/analytics";
 import { parseDateTimestamp } from "./lib/dates";
+import { to24, fromTimeInput, splitLegacyTime, timeRangeLabel } from "./lib/callTimes";
 import { naturalTrackSorter } from "./lib/music";
 import { launchFanfareCelebration } from "./lib/celebration";
 import { processCastRows } from "./lib/cast";
@@ -130,6 +131,8 @@ export function ProductionApp() {
     id: '',
     title: '',
     date: '',
+    startTime: '',
+    endTime: '',
     time: '',
     location: '',
     type: 'Wednesday Partial Call',
@@ -399,6 +402,8 @@ export function ProductionApp() {
       id: 'reh-' + Date.now(),
       title: '',
       date: new Date().toISOString().split('T')[0],
+      startTime: '',
+      endTime: '',
       time: '',
       location: '',
       type: callTypes[0] || 'Wednesday Partial Call',
@@ -414,8 +419,12 @@ export function ProductionApp() {
   };
 
   const openEditCall = (reh) => {
+    // Older entries only have one combined time string; split it so the pickers fill in.
+    const legacy = splitLegacyTime(reh.time);
     setEditCallData({
       ...reh,
+      startTime: to24(reh.startTime) || legacy[0],
+      endTime: to24(reh.endTime) || legacy[1],
       customType: '',
       calledRoles: Array.isArray(reh.calledRoles) ? reh.calledRoles : (reh.calledRoles ? [reh.calledRoles] : []),
       focusScenes: Array.isArray(reh.focusScenes) ? reh.focusScenes.join(', ') : (reh.focusScenes || ''),
@@ -515,12 +524,25 @@ export function ProductionApp() {
       }
     }
 
+    const { startTime, endTime } = editCallData;
+    if (!startTime || !endTime) {
+      alert('Please set both a start and an end time.');
+      return;
+    }
+    if (endTime <= startTime) {
+      alert('The end time must be after the start time.');
+      return;
+    }
+
     const sceneArray = typeof editCallData.focusScenes === 'string'
       ? editCallData.focusScenes.split(',').map(s => s.trim()).filter(Boolean)
       : editCallData.focusScenes;
 
     const newEntry = {
       ...editCallData,
+      startTime: fromTimeInput(startTime),
+      endTime: fromTimeInput(endTime),
+      time: timeRangeLabel(startTime, endTime),
       type: finalType,
       calledRoles: editCallData.calledRoles,
       focusScenes: sceneArray,
