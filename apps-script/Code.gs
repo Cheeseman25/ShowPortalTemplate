@@ -9,6 +9,8 @@
  *   CALENDAR_ID           public Google Calendar ID (…@group.calendar.google.com)
  *   MUSIC_ROOT_FOLDER_ID  Drive folder ID holding the rehearsal tracks
  *
+ * VERSION 3 (2026-10-21): Time split into StartTime/EndTime; calendar sync (calendarSync.gs VERSION 3).
+ *
  * First time: run setupSheets() once from the editor to create the tabs.
  */
 
@@ -127,7 +129,7 @@ function doPost(e) {
 
 /**
  * Retrieves rehearsal notices from the Google Sheet
- * Columns: ID, Title, Date, Time, Location, Type, CalledRoles, FocusScenes, Notes, IsArchived
+ * Columns: ID, Title, Date, StartTime, EndTime, Location, Type, CalledRoles, FocusScenes, Notes, IsArchived
  */
 function getRehearsalCalls() {
   var sheet = getOrCreateRehearsalsSheet();
@@ -139,6 +141,8 @@ function getRehearsalCalls() {
   var titleIdx = headers.indexOf("title");
   var dateIdx = headers.indexOf("date");
   var timeIdx = headers.indexOf("time");
+  var startIdx = headers.indexOf("starttime");
+  var endIdx = headers.indexOf("endtime");
   var locIdx = headers.indexOf("location");
   var typeIdx = headers.indexOf("type");
   var rolesIdx = headers.indexOf("calledroles");
@@ -161,7 +165,10 @@ function getRehearsalCalls() {
         id: String(row[idIdx !== -1 ? idIdx : 0]),
         title: String(row[titleIdx !== -1 ? titleIdx : 1] || ""),
         date: formatDateForClient(row[dateIdx !== -1 ? dateIdx : 2]),
-        time: String(row[timeIdx !== -1 ? timeIdx : 3] || ""),
+        startTime: timeText_(row[startIdx !== -1 ? startIdx : (timeIdx !== -1 ? timeIdx : 3)]),
+        endTime: timeText_(endIdx !== -1 ? row[endIdx] : ""),
+        time: timeText_(row[startIdx !== -1 ? startIdx : (timeIdx !== -1 ? timeIdx : 3)]) +
+              (endIdx !== -1 && row[endIdx] ? " - " + timeText_(row[endIdx]) : ""),
         location: String(row[locIdx !== -1 ? locIdx : 4] || ""),
         type: String(row[typeIdx !== -1 ? typeIdx : 5] || "Rehearsal"),
         calledRoles: parseCommaList(row[rolesIdx !== -1 ? rolesIdx : 6]),
@@ -189,11 +196,16 @@ function saveRehearsalCall(item) {
     }
   }
 
+  var parts = splitTimeRange_(item.time);
+  var startT = item.startTime || parts[0];
+  var endT = item.endTime || parts[1];
+
   var rowData = [
     item.id || ("reh-" + new Date().getTime()),
     item.title || "Rehearsal Call",
     item.date || "",
-    item.time || "",
+    startT,
+    endT,
     item.location || "",
     item.type || "Rehearsal",
     Array.isArray(item.calledRoles) ? item.calledRoles.join(", ") : (item.calledRoles || ""),
@@ -208,6 +220,8 @@ function saveRehearsalCall(item) {
     sheet.appendRow(rowData);
   }
 
+  try { syncRehearsalById(rowData[0]); } catch (err) { Logger.log("calendar sync: " + err); }
+
   return { status: "success", id: rowData[0] };
 }
 
@@ -221,14 +235,16 @@ function setRehearsalArchivedStatus(id, archiveBoolean) {
 
   for (var r = 1; r < rows.length; r++) {
     if (String(rows[r][0]) === String(id)) {
-      // Column 10 is IsArchived
-      sheet.getRange(r + 1, 10).setValue(archiveBoolean);
+      var archCol = headerCol_(sheet, "isarchived");
+      if (archCol === -1) archCol = 11;
+      sheet.getRange(r + 1, archCol).setValue(archiveBoolean);
       found = true;
       break;
     }
   }
 
   if (found) {
+    try { syncRehearsalById(id); } catch (err) { Logger.log("calendar sync: " + err); }
     return { status: "success", id: id, isArchived: archiveBoolean };
   } else {
     return { status: "error", message: "Notice ID not found: " + id };
@@ -247,7 +263,8 @@ function getOrCreateRehearsalsSheet() {
         "ID",
         "Title",
         "Date",
-        "Time",
+        "StartTime",
+        "EndTime",
         "Location",
         "Type",
         "CalledRoles",
@@ -396,4 +413,26 @@ function formatDateForClient(val) {
     return year + "-" + month + "-" + day;
   }
   return String(val);
+}
+
+// ---------- v3 helpers ----------
+
+/** Sheet cell to display text. Sheets may return time cells as Date objects. */
+function timeText_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, Session.getScriptTimeZone(), "h:mm a");
+  return String(v == null ? "" : v).trim();
+}
+
+/** Splits an old-style "4:00 PM - 6:00 PM" value into [start, end]. */
+function splitTimeRange_(s) {
+  var parts = String(s || "").split(/\s*[-\u2013]\s*/);
+  return [parts[0] || "", parts[1] || ""];
+}
+
+/** 1-based column number of a header (case-insensitive), or -1. */
+function headerCol_(sheet, name) {
+  var h = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0]
+            .map(function(x) { return String(x).toLowerCase().trim(); });
+  var i = h.indexOf(String(name).toLowerCase());
+  return i === -1 ? -1 : i + 1;
 }
