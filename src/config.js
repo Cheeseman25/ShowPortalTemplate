@@ -7,6 +7,7 @@ export { SHOW };
 export const CALENDAR_ID = SHOW.calendarId;
 export const YOUTUBE_REHEARSAL_PLAYLIST_ID = SHOW.youtubePlaylistId;
 export const YOUTUBE_CHOREO_PLAYLIST_ID = SHOW.videosPlaylistId || "";
+export const YOUTUBE_API_KEY = SHOW.youtubeApiKey || "";
 export const ARTWORK_URL = SHOW.artworkUrl;
 export const LOGO_URL = SHOW.company.logoUrl;
 export const CALLBOARD_BACKEND_URL = SHOW.backendUrl;
