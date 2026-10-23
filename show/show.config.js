@@ -43,6 +43,9 @@ module.exports = {
   youtubePlaylistId: "",                 // optional YouTube playlist ID
   videosPlaylistId: "",                  // optional YouTube playlist for the Choreography Vault (must be Public or Unlisted)
   videosPlaylistTitle: "",               // optional title for the Choreography Vault embed
+  // optional YouTube Data API v3 key, restricted to your site's referrer. Lists the Vault playlist
+  // automatically. Leave "" to show the plain playlist embed.
+  youtubeApiKey: "",
   analyticsId: "",                       // optional Google Analytics 4 ID (G-…); "" turns analytics off
 
   // Shown on the music page if the Drive folder can't be loaded. Usually [].
