@@ -64,7 +64,7 @@ Hash-based routing on a single page. `TAB_INFO` is the route table; `getInitialT
 | `#cast` | 🎭 Cast Members | Mystery reveal cast cards |
 | `#costumes` | 👗 Costumes | **Placeholder** ("coming soon") |
 | `#music` | 🎵 Rehearsal Tracks | Drive audio player + YouTube playlist sub-view |
-| `#videos` | 🎬 Choreography Vault | **Placeholder** ("coming soon") |
+| `#videos` | 🎬 Choreography Vault | Thumbnail picker over the choreography YouTube playlist (see section below) |
 | `#calendar` | 🗓️ Master Schedule | Live Google Calendar feed |
 
 Sub-views and overlays (not routed, component state only):
@@ -107,7 +107,14 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Open Drive Folder link, Sync Folder (clears cache and refetches).
 - YouTube Stream sub-view embedding the rehearsal playlist (youtube-nocookie).
 
-### Choreography Vault (`#videos`) — placeholder only.
+### Choreography Vault (`#videos`)
+
+- Lists the playlist in `videosPlaylistId` through the YouTube Data API (`playlistItems.list`) when the tab opens. New entries appear on the next visit, with no code change.
+- Renders a thumbnail grid. The selected video plays in a youtube-nocookie embed. The first entry plays by default.
+- Pages through up to 500 entries (10 pages x 50). Skips hidden or removed entries and any ID that fails the 11-character check.
+- Falls back to the plain playlist embed when `youtubeApiKey` is blank or the API call fails. Shows "coming soon" when `videosPlaylistId` is blank.
+- Calls the API only while the tab is open.
+- Setup: create a YouTube Data API v3 key, restrict it to your site's referrer and to that API, then set `youtubeApiKey` in `show/show.config.js`.
 
 ### Master Schedule (`#calendar`)
 - Events from Google Calendar (2 weeks back to ~8 months ahead), grouped by month.
