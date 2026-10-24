@@ -2,7 +2,7 @@
 // Lists the YouTube playlist through the Data API so entries added in YouTube appear
 // without a code change. Falls back to the plain playlist embed if no key is set or the call fails.
 
-import { SHOW, YOUTUBE_CHOREO_PLAYLIST_ID, YOUTUBE_API_KEY } from "../config";
+import { SHOW, YOUTUBE_CHOREO_PLAYLIST_ID, YOUTUBE_API_KEY, VIDEOS_API_URL } from "../config";
 
 // Pagination cap: 10 pages x 50 items = 500 entries, which bounds quota use and response size.
 const MAX_PAGES = 10;
@@ -53,6 +53,22 @@ async function fetchPlaylistVideos(playlistId, apiKey) {
   }
 }
 
+// Gets the same [{ id, title, thumb }] list from the show's own API, which holds the YouTube key.
+// Returns null on any failure so the caller can fall back to the embed.
+async function fetchProxyVideos(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const list = await res.json();
+    return Array.isArray(list) ? list.filter((v) => v && VIDEO_ID_PATTERN.test(v.id)) : null;
+  } catch (err) {
+    return null;
+  }
+}
+
+// True when a video source is configured: the server-side API, or a browser-side key.
+const HAS_VIDEO_SOURCE = Boolean(VIDEOS_API_URL || YOUTUBE_API_KEY);
+
 // Page section for the Choreography Vault. Renders only when its tab is active.
 export function VideosTab({ ctx }) {
   const { activeTab } = ctx;
@@ -67,11 +83,12 @@ export function VideosTab({ ctx }) {
 
   // Load the playlist only when this tab is open, so quota is spent only when someone looks at it.
   React.useEffect(() => {
-    if (activeTab !== "videos" || startedRef.current || !YOUTUBE_CHOREO_PLAYLIST_ID || !YOUTUBE_API_KEY) return;
+    if (activeTab !== "videos" || startedRef.current || !YOUTUBE_CHOREO_PLAYLIST_ID || !HAS_VIDEO_SOURCE) return;
     startedRef.current = true;
 
     setStatus("loading");
-    fetchPlaylistVideos(YOUTUBE_CHOREO_PLAYLIST_ID, YOUTUBE_API_KEY).then((list) => {
+    const load = VIDEOS_API_URL ? fetchProxyVideos(VIDEOS_API_URL) : fetchPlaylistVideos(YOUTUBE_CHOREO_PLAYLIST_ID, YOUTUBE_API_KEY);
+    load.then((list) => {
       if (list === null) {
         setStatus("failed");
         return;
@@ -106,7 +123,7 @@ export function VideosTab({ ctx }) {
         <div className="glass-card p-12 text-center rounded-3xl border border-primary-500/20">
           <p className="text-sm text-slate-300">No choreography videos have been added to the playlist yet.</p>
         </div>
-      ) : !YOUTUBE_API_KEY || status === "failed" ? (
+      ) : !HAS_VIDEO_SOURCE || status === "failed" ? (
         <PlaylistEmbed title={SHOW.videosPlaylistTitle} />
       ) : (
         <div className="glass-card p-12 text-center rounded-3xl border border-primary-500/20">

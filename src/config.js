@@ -1,6 +1,7 @@
 // Engine-side view of the show settings (show/show.config.js) plus the page registry.
 // Show-specific values belong in show/show.config.js, not here.
-import SHOW from "../show/show.config.js";
+// "show-config" is resolved by the build (scripts/build.mjs) to the chosen show settings file.
+import SHOW from "show-config";
 
 export { SHOW };
 
@@ -8,9 +9,13 @@ export const CALENDAR_ID = SHOW.calendarId;
 export const YOUTUBE_REHEARSAL_PLAYLIST_ID = SHOW.youtubePlaylistId;
 export const YOUTUBE_CHOREO_PLAYLIST_ID = SHOW.videosPlaylistId || "";
 export const YOUTUBE_API_KEY = SHOW.youtubeApiKey || "";
+// Server-side playlist list ([{ id, title, thumb }]). When set, the browser never needs a YouTube key.
+export const VIDEOS_API_URL = SHOW.videosApiUrl || "";
 export const ARTWORK_URL = SHOW.artworkUrl;
 export const LOGO_URL = SHOW.company.logoUrl;
 export const CALLBOARD_BACKEND_URL = SHOW.backendUrl;
+// Call board reads/writes/login. Defaults to the Apps Script backend; a show can point it at its own API.
+export const CALL_API_URL = SHOW.callBoardUrl || SHOW.backendUrl;
 export const DIRECT_CAST_CSV_URL = SHOW.castCsvUrl;
 export const GOOGLE_DRIVE_MUSIC_FOLDER_URL = SHOW.musicFolderUrl;
 export const FALLBACK_TRACKS = SHOW.fallbackTracks || [];

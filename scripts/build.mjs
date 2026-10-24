@@ -6,24 +6,50 @@
 //
 // Usage:
 //   npm run build              production build (needs the Tailwind CLI from npm)
+//   npm run build:aws          same site with show/show.aws.config.js merged over the settings
+//                              (AWS call board and video API)
+//   node scripts/build.mjs --overlay show/other.config.js
+//       Merge another overrides file over show/show.config.js. Objects merge one level deep;
+//       everything else is replaced. Only the merged result is bundled.
 //   node scripts/build.mjs --cdn-css
 //       Preview build that skips the Tailwind CLI and uses the Tailwind CDN script
 //       instead (only for testing where npm isn't available).
 //
 // Show-specific values (title, icon, analytics, languages, colors) come from
-// show/show.config.js.
+// show/show.config.js (or the file given with --config).
 
 import { build } from "esbuild";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const dist = path.join(root, "dist");
 const cdnCss = process.argv.includes("--cdn-css");
-const SHOW = createRequire(import.meta.url)(path.join(root, "show/show.config.js"));
+const require = createRequire(import.meta.url);
+const baseConfigPath = path.join(root, "show/show.config.js");
+const overlayArg = process.argv.indexOf("--overlay");
+const isPlain = (v) => v && typeof v === "object" && !Array.isArray(v);
+
+// Settings the app is built with. With --overlay, the overrides are merged here in Node and the merged
+// result is written to a temp JSON file for the bundler. Bundling the base file too would leave
+// overridden values (such as a retired API key) in the shipped code.
+let SHOW = require(baseConfigPath);
+let configPath = baseConfigPath;
+if (overlayArg > -1) {
+  const overlayPath = path.resolve(root, process.argv[overlayArg + 1] || "");
+  if (!fs.existsSync(overlayPath)) throw new Error(`overlay file not found: ${overlayPath}`);
+  const overlay = require(overlayPath);
+  SHOW = { ...SHOW };
+  for (const [key, value] of Object.entries(overlay)) {
+    SHOW[key] = isPlain(value) && isPlain(SHOW[key]) ? { ...SHOW[key], ...value } : value;
+  }
+  configPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "show-config-")), "show.merged.json");
+  fs.writeFileSync(configPath, JSON.stringify(SHOW));
+}
 
 fs.rmSync(dist, { recursive: true, force: true });
 fs.mkdirSync(path.join(dist, "assets"), { recursive: true });
@@ -43,11 +69,14 @@ const js = await build({
   jsxFactory: "React.createElement",
   jsxFragment: "React.Fragment",
   legalComments: "none",
+  alias: { "show-config": configPath },   // src/config.js imports the chosen settings file by this name
   write: false,
 });
 const jsCode = js.outputFiles[0].contents;
 const jsName = hashName("app", "js", jsCode);
 fs.writeFileSync(path.join(dist, "assets", jsName), jsCode);
+
+if (overlayArg > -1) fs.rmSync(path.dirname(configPath), { recursive: true, force: true });  // temp merged settings no longer needed
 
 // 2. CSS
 let stylesTag;

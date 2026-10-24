@@ -1,5 +1,6 @@
 // Root component: owns all state, data loading and handlers; renders the page sections.
-import { SHOW, CALLBOARD_BACKEND_URL, DIRECT_CAST_CSV_URL, FALLBACK_TRACKS, INITIAL_CALL_TYPES, TAB_INFO, DEFAULT_TAB, storageKey } from "./config";
+import { SHOW, CALLBOARD_BACKEND_URL, CALL_API_URL, DIRECT_CAST_CSV_URL, FALLBACK_TRACKS, INITIAL_CALL_TYPES, TAB_INFO, DEFAULT_TAB, storageKey } from "./config";
+import { postCall } from "./lib/callApi";
 import { startSnow } from "./effects/snow";
 import { trackAnalyticsEvent } from "./lib/analytics";
 import { parseDateTimestamp } from "./lib/dates";
@@ -265,9 +266,9 @@ export function ProductionApp() {
   };
 
   const fetchBackendRehearsals = async () => {
-    if (!CALLBOARD_BACKEND_URL) return;
+    if (!CALL_API_URL) return;
     try {
-      const res = await fetch(`${CALLBOARD_BACKEND_URL}?t=${Date.now()}`);
+      const res = await fetch(`${CALL_API_URL}${CALL_API_URL.includes('?') ? '&' : '?'}t=${Date.now()}`);
       const data = await res.json();
       if (Array.isArray(data)) {
         const formatted = data.map(item => {
@@ -370,12 +371,7 @@ export function ProductionApp() {
     setAdminPinError('');
 
     try {
-      const res = await fetch(CALLBOARD_BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'verifyPin', pin: adminPinInput })
-      });
-      const result = await res.json();
+      const result = await postCall(CALL_API_URL, { action: 'verifyPin', pin: adminPinInput });
 
       if (result.status === 'success') {
         sessionStorage.setItem(storageKey('admin_token'), adminPinInput);
@@ -566,14 +562,9 @@ export function ProductionApp() {
     localStorage.setItem(storageKey('rehearsals'), JSON.stringify(updated));
     setIsEditingCall(false);
 
-    if (CALLBOARD_BACKEND_URL) {
+    if (CALL_API_URL) {
       try {
-        const res = await fetch(CALLBOARD_BACKEND_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'save', pin: adminSessionToken, item: newEntry })
-        });
-        const data = await res.json();
+        const data = await postCall(CALL_API_URL, { action: 'save', pin: adminSessionToken, item: newEntry });
         if (data.status === 'error') {
           alert('Save failed: ' + data.message);
         } else {
@@ -596,18 +587,13 @@ export function ProductionApp() {
   };
 
   const resolveCalendarChoice = async (choice, eventId) => {
-    if (!pendingCalendarChoice || !CALLBOARD_BACKEND_URL) return;
+    if (!pendingCalendarChoice || !CALL_API_URL) return;
     setCalendarChoiceBusy(true);
     try {
       const body = choice === 'attach'
         ? { action: 'calendarAttach', pin: adminSessionToken, id: pendingCalendarChoice.call.id, eventId }
         : { action: 'calendarCreate', pin: adminSessionToken, id: pendingCalendarChoice.call.id };
-      const res = await fetch(CALLBOARD_BACKEND_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify(body)
-      });
-      const data = await res.json();
+      const data = await postCall(CALL_API_URL, body);
       if (data.status === 'error') {
         alert('Calendar update failed: ' + data.message);
       } else {
@@ -634,14 +620,9 @@ export function ProductionApp() {
       setRehearsals(updated);
       localStorage.setItem(storageKey('rehearsals'), JSON.stringify(updated));
 
-      if (CALLBOARD_BACKEND_URL) {
+      if (CALL_API_URL) {
         try {
-          const res = await fetch(CALLBOARD_BACKEND_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-            body: JSON.stringify({ action: 'save', pin: adminSessionToken, item: updatedEntry })
-          });
-          const data = await res.json();
+          const data = await postCall(CALL_API_URL, { action: 'save', pin: adminSessionToken, item: updatedEntry });
           if (data.status === 'error') {
             alert('Archive update failed: ' + data.message);
           }
