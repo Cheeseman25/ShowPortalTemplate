@@ -1,0 +1,14 @@
+{
+  "name": "callboard-api",
+  "private": true,
+  "type": "module",
+  "description": "Call board API (AWS Lambda). The AWS SDK is provided by the Lambda runtime; it is installed here only to run the tests.",
+  "scripts": {
+    "test": "node --test index.test.mjs"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-dynamodb": "3.1156.0",
+    "@aws-sdk/client-ssm": "3.1156.0",
+    "@aws-sdk/lib-dynamodb": "3.1156.0"
+  }
+}

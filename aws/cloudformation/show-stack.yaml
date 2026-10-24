@@ -1,0 +1,295 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  One theatre show site on AWS: private S3 site behind CloudFront on its own domain, with the call board API
+  (Lambda + DynamoDB) and YouTube playlist proxy served from the same domain -- same-origin API means no CORS
+  and no public Lambda URL.
+
+Metadata:
+  AWSToolsMetrics:
+    AWSAgentToolkit: aws-cloudformation@3
+  com.aws.cloudformation.Context:
+    arch: "browser -> CloudFront (custom domain) -> {S3 site | Lambda fn URL (IAM+OAC) -> DynamoDB, SSM, Apps Script calendar bridge}"
+    must:
+      - "SecureStrings (PIN, bridge secret, YouTube key) are made OUTSIDE this stack: CFN cannot create SecureString. Names = ParameterPrefix + /admin-pin, /sync-secret, /youtube-key"
+      - "ACM cert must be in us-east-1 (CloudFront requirement) and cover DomainName"
+      - "Region = project Region only; no cross-Region resources"
+    ref:
+      - { at: aws/README.md, has: "setup runbook, secrets, DNS, deploy", scope: this-template }
+
+Parameters:
+  DomainName:
+    Type: String
+    Description: Fully qualified site address, for example seussical2027.example.org
+  CertificateArn:
+    Type: String
+    Description: ACM certificate ARN in us-east-1 that covers DomainName (a wildcard cert can be shared by every show)
+    AllowedPattern: "^arn:aws:acm:us-east-1:[0-9]{12}:certificate/[A-Za-z0-9-]+$"
+  ParameterPrefix:
+    Type: String
+    Description: SSM Parameter Store prefix holding this show's secrets, for example /tts/seussical2027 (no trailing slash)
+    AllowedPattern: "^/[A-Za-z0-9/_-]+[A-Za-z0-9_-]$"
+  CodeBucket:
+    Type: String
+    Description: Private S3 bucket (same Region) that holds the Lambda zip
+  CodeKey:
+    Type: String
+    Default: deploy/callboard-api.zip
+    Description: S3 key of the Lambda zip built from aws/callboard-api/index.mjs
+  PlaylistId:
+    Type: String
+    Default: ""
+    Description: YouTube playlist ID listed at /api/videos (blank turns the Choreography list off)
+  AppsScriptUrl:
+    Type: String
+    Default: ""
+    Description: Apps Script web app /exec URL used for Google Calendar updates (blank turns the calendar bridge off)
+
+Resources:
+  SiteBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "private origin for built site; only CloudFront reads it (OAC)"
+        must: ["BlockPublicAccess all true", "stateful: keep Retain"]
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+
+  SiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DenyInsecureTransport
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SiteBucket.Arn
+              - !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+          - Sid: AllowCloudFrontRead
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: "s3:GetObject"
+            Resource: !Sub "${SiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                "AWS:SourceArn": !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  CallsTable:
+    Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "call board rows; on-demand (tiny, bursty); PITR for undo. Item id '_auth' = PIN lockout counter"
+        must: ["partition key id (string) -- Lambda assumes it", "stateful: keep Retain"]
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  FunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AWS::StackName}-callboard"
+      RetentionInDays: 90
+
+  FunctionRole:
+    Type: AWS::IAM::Role
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "least privilege: one table, three named parameters, own log group"
+        must: ["no wildcard resources", "no ssm:GetParameter on other shows' prefixes"]
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+            Condition:
+              StringEquals:
+                "aws:SourceAccount": !Ref AWS::AccountId
+      Policies:
+        - PolicyName: callboard
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:Scan"]
+                Resource: !GetAtt CallsTable.Arn
+              - Effect: Allow
+                Action: "ssm:GetParameters"
+                Resource:
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/admin-pin"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/sync-secret"
+                  - !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${ParameterPrefix}/youtube-key"
+              - Effect: Allow
+                Action: ["logs:CreateLogStream", "logs:PutLogEvents"]
+                Resource: !Sub "${FunctionLogGroup.Arn}:*"
+
+  Function:
+    Type: AWS::Lambda::Function
+    DependsOn: FunctionLogGroup
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "call board + playlist proxy; arm64 (cheaper); 15s > 8s calendar bridge timeout"
+        must: ["env names must match aws/callboard-api/index.mjs", "reach only via CloudFront OAC"]
+    Properties:
+      FunctionName: !Sub "${AWS::StackName}-callboard"
+      Runtime: nodejs22.x
+      Architectures: [arm64]
+      Handler: index.handler
+      MemorySize: 256
+      Timeout: 15
+      Role: !GetAtt FunctionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeBucket
+        S3Key: !Ref CodeKey
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref CallsTable
+          PIN_PARAM: !Sub "${ParameterPrefix}/admin-pin"
+          SYNC_PARAM: !Sub "${ParameterPrefix}/sync-secret"
+          YT_PARAM: !Sub "${ParameterPrefix}/youtube-key"
+          YT_PLAYLIST_ID: !Ref PlaylistId
+          APPS_SCRIPT_URL: !Ref AppsScriptUrl
+
+  FunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt Function.Arn
+      AuthType: AWS_IAM
+
+  PermissionInvokeUrl:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: "lambda:InvokeFunctionUrl"
+      Principal: cloudfront.amazonaws.com
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  PermissionInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref Function
+      Action: "lambda:InvokeFunction"
+      Principal: cloudfront.amazonaws.com
+      SourceArn: !Sub "arn:${AWS::Partition}:cloudfront::${AWS::AccountId}:distribution/${Distribution}"
+
+  SiteOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-site"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ApiOac:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "${AWS::StackName}-api"
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      com.aws.cloudformation.Context:
+        why: "one origin per concern on one domain; API paths use CachingDisabled + AllViewerExceptHostHeader (managed policies) so every call reaches Lambda"
+        must: ["/api/* behaviors need an exact path each; POST needs viewer to send x-amz-content-sha256 (src/lib/callApi.js does)", "cert us-east-1"]
+        mutable: review-required
+    Properties:
+      DistributionConfig:
+        Comment: !Sub "${AWS::StackName} show site"
+        Enabled: true
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Aliases: [!Ref DomainName]
+        ViewerCertificate:
+          AcmCertificateArn: !Ref CertificateArn
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
+        Origins:
+          - Id: site
+            DomainName: !GetAtt SiteBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt SiteOac.Id
+            S3OriginConfig:
+              OriginAccessIdentity: ""
+          - Id: api
+            DomainName: !Select [2, !Split ["/", !GetAtt FunctionUrl.FunctionUrl]]
+            OriginAccessControlId: !GetAtt ApiOac.Id
+            CustomOriginConfig:
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols: [TLSv1.2]
+        DefaultCacheBehavior:
+          TargetOriginId: site
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods: [GET, HEAD]
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6   # Managed-CachingOptimized
+        CacheBehaviors:
+          - PathPattern: /api/calls
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            Compress: true
+            AllowedMethods: [GET, HEAD, OPTIONS, PUT, PATCH, POST, DELETE]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad            # Managed-CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac    # Managed-AllViewerExceptHostHeader
+          - PathPattern: /api/videos
+            TargetOriginId: api
+            ViewerProtocolPolicy: https-only
+            Compress: true
+            AllowedMethods: [GET, HEAD]
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+
+Outputs:
+  DnsTarget:
+    Description: Create a DNS-only CNAME from DomainName to this value
+    Value: !GetAtt Distribution.DomainName
+  DistributionId:
+    Description: Use for cache invalidations after each site upload
+    Value: !Ref Distribution
+  SiteBucketName:
+    Description: Upload the built site (dist/) here
+    Value: !Ref SiteBucket
+  FunctionName:
+    Description: Update this function's code after changing aws/callboard-api
+    Value: !Ref Function
+  TableName:
+    Description: Call board DynamoDB table
+    Value: !Ref CallsTable
