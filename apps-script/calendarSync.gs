@@ -1,11 +1,10 @@
 /**
- * calendarSync.gs  VERSION 4 (2026-10-21, branch calendar-sync)
- * STAGED; not deployed or tested in Apps Script yet.
+ * calendarSync.gs  VERSION 5 (AWS-only)
  *
  * Writes call board details into EXISTING calendar events.
  *   - Each call is matched to the event on the same date whose time window overlaps it.
  *   - Several calls can land on one event; each gets its own labeled section.
- *   - Sections are rebuilt from the Sheet every sync, so nothing is duplicated or stale.
+ *   - Sections are rebuilt from the AWS calls every sync, so nothing is duplicated or stale.
  *   - Event times and titles are never changed.
  *   - A call with no matching event is logged, NOT created (create-on-miss comes later,
  *     with the in-app prompt).
@@ -15,9 +14,8 @@
  * "Name (Character)" and only the character part is used. Notes stay off unless
  * SYNC_INCLUDE_NOTES is true.
  *
- * Hook points (Code.gs):
- *   saveRehearsalCall        -> syncRehearsalById(rowData[0])
- *   setRehearsalArchivedStatus -> syncRehearsalById(id)
+ * Entry points (Code.gs doPost): awsSync -> syncDate_, awsAttach/awsCreate -> resolveCallChoice.
+ * Calls come from AWS in CALLS_OVERRIDE_ (read through getRehearsalCalls()).
  */
 
 var SYNC_INCLUDE_NOTES = false;
@@ -26,15 +24,8 @@ var SYNC_MARKER = "[Call board: updates automatically]";
 
 // ---------- entry points ----------
 
-/** Re-sync the date of one call. Safe to call from the save/archive hooks. */
-function syncRehearsalById(id) {
-  var hit = getRehearsalCalls().filter(function(r) { return String(r.id) === String(id); });
-  if (hit.length === 0) return { status: "error", message: "call not found: " + id };
-  return syncDate_(hit[0].date);
-}
-
 /**
- * Called from the app after the user answers the prompt.
+ * Called (via the AWS bridge) after the user answers the prompt.
  *   choice = "attach": attach this call to eventId (an existing event on that date)
  *   choice = "create": create a new calendar event for this call's time
  */
@@ -74,18 +65,6 @@ function resolveCallChoice(id, choice, eventId) {
     Logger.log("resolveCallChoice error: " + err);
     return { status: "error", message: String(err) };
   }
-}
-
-/** Manual run: re-syncs every date on the call board. Run once after deploying. */
-function syncAllRehearsalsToCalendar() {
-  var dates = {};
-  getRehearsalCalls().forEach(function(r) { if (r.date) dates[r.date] = true; });
-  var lines = Object.keys(dates).sort().map(function(d) {
-    var res = syncDate_(d);
-    return d + ": " + res.status + (res.report ? "\n  " + res.report.join("\n  ") : (res.message ? " " + res.message : ""));
-  });
-  Logger.log(lines.join("\n"));
-  return lines;
 }
 
 // ---------- core ----------

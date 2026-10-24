@@ -7,18 +7,24 @@
 
 A single-page **production portal and call board** for a theatre production. Families, cast and crew see rehearsal calls, cast assignments, rehearsal music and the season calendar. Directors/crew log in with a PIN to post and archive rehearsal calls.
 
-- **Template repo:** `Cheeseman25/ShowPortalTemplate`. Each show is its own repo created from it ("Use this template"), served at `https://cheeseman25.github.io/<RepoName>/`.
+**Hosting model: AWS only.** The site is on S3 + CloudFront, the call board is a Lambda + DynamoDB API, and Google (Sheet, Calendar, Drive) still holds the cast list, schedule and music so non-technical partners can edit them. The older GitHub-Pages-plus-Sheet call board is no longer supported by the template.
+
+- **Template repo:** `Cheeseman25/ShowPortalTemplate`. Each show is its own repo created from it ("Use this template"), served at its own subdomain named show+year, e.g. `https://seussical2027.ttsplayershaverhillbradford.com` (one subdomain per show so each show has its own browser-storage origin).
 - **Engine vs show:** everything show-specific is in `show/show.config.js` (+ images in `public/`). `src/` is the shared engine; keep show-specific text, colors and IDs out of it.
 - Engine improvements go into the template first. Past shows keep their copy; port a change by copying the affected `src/` files.
 
 ## Architecture at a glance
 
 ```
-Browser (GitHub Pages: dist/ — index.html + assets/app-<hash>.js + assets/styles-<hash>.css)
-   │  GET  ?action=…            POST {action, pin, …}  (Content-Type: text/plain to avoid CORS preflight)
+Browser (S3 + CloudFront: dist/ — index.html + assets/app-<hash>.js + assets/styles-<hash>.css)
+   │  same-origin  /api/calls  (GET list, POST {action, pin, …})   /api/videos (GET)
    ▼
-Google Apps Script web app (backendUrl …/exec), bound to the show's Google Sheet
-   ├── Sheet tab "Rehearsals" → rehearsal call notices (read/write)
+CloudFront → Lambda function URL (IAM auth via CloudFront OAC)  aws/callboard-api/index.mjs
+   ├── DynamoDB table            → rehearsal calls (read/write, archive only, never delete)
+   ├── SSM SecureStrings         → staff PIN, bridge secret, YouTube key (never in the repo or browser)
+   └── Apps Script bridge        → calendar updates only (awsSync / awsAttach / awsCreate)
+
+Browser also calls the Apps Script web app (backendUrl …/exec), bound to the show's Google Sheet:
    ├── Sheet tab "Cast"       → cast roster (read)
    ├── Google Calendar (Script Property CALENDAR_ID) → season schedule (read)
    └── Drive folder (Script Property MUSIC_ROOT_FOLDER_ID) + subfolders → audio tracks (read)
@@ -28,7 +34,7 @@ Fallback: cast also loads from a published-to-web CSV of the Cast tab (castCsvUr
 
 **Build:** `npm run build` (scripts/build.mjs) bundles `src/main.jsx` with esbuild into one minified `assets/app-<hash>.js`, compiles Tailwind v3 + `src/styles.css` into `assets/styles-<hash>.css`, fills `src/index.html` placeholders (`{{pageTitle}}`, `{{icon}}`, languages, `<!--ANALYTICS-->`) from the show settings, and copies `public/` into `dist/`. React 18.3.1 / ReactDOM load as global UMD scripts from unpkg; canvas-confetti, Google Translate, GA4 and Google Fonts from CDNs.
 
-**Deploy:** `.github/workflows/deploy.yml` builds on every push; pushes to `main` publish `dist/` to GitHub Pages. Needs repo Settings → Pages → Source = "GitHub Actions".
+**Deploy:** infrastructure is `aws/cloudformation/show-stack.yaml`; follow `aws/README.md` (create the stack, upload `dist/` to the site bucket, invalidate CloudFront). `.github/workflows/deploy.yml` only checks that the site builds; publishing to GitHub Pages is opt-in with the repo variable `PAGES_DEPLOY=true`.
 
 ## Files
 
@@ -49,7 +55,10 @@ Fallback: cast also loads from a published-to-web CSV of the Cast tab (castCsvUr
 | `src/lib/callTimes.js` | Time helpers for the call form (`to24`, `fromTimeInput`, `splitLegacyTime`, `timeRangeLabel`). |
 | `src/styles.css` | Custom CSS (colors via Tailwind `theme()`), then the Tailwind directives. Tailwind must stay **after** the custom CSS so utilities override custom classes like `.glass-card`. |
 | `tailwind.config.js` | Maps `primary`, `accent`, `page` colors from the show theme. Use `primary-*` / `accent-*` classes, never hardcoded palette names, for themed elements. |
-| `apps-script/Code.gs` | Backend script, **VERSION 4** (no secrets; settings in Script Properties). Pasted into the Sheet's Apps Script editor; it is not deployed from the repo. |
+| `apps-script/Code.gs` | Backend script, **VERSION 6** (no secrets; settings in Script Properties). Pasted into the Sheet's Apps Script editor; it is not deployed from the repo. |
+| `aws/callboard-api/` | The call board Lambda (`index.mjs`) and its tests. |
+| `aws/cloudformation/show-stack.yaml` | One stack per show: site bucket, CloudFront, Lambda, DynamoDB. |
+| `aws/README.md` | Runbook for launching a show on AWS. |
 | `apps-script/calendarSync.gs` | Calendar sync module, **VERSION 4**. Writes call details into existing calendar events by time overlap; never creates events from a save. Paste as a second file in the same Apps Script project. |
 | `scripts/build.mjs` | Build (`--cdn-css` = preview build using the Tailwind CDN instead of the CLI). |
 | `.github/workflows/deploy.yml` | Build + deploy. |
@@ -60,7 +69,7 @@ Hash-based routing on a single page. `TAB_INFO` is the route table; `getInitialT
 
 | Route | Label | Content |
 |---|---|---|
-| `#callboard` | 📅 Call Board & Schedule | Rehearsal call notices from the Sheet |
+| `#callboard` | 📅 Call Board & Schedule | Rehearsal call notices from the AWS call board API |
 | `#cast` | 🎭 Cast Members | Mystery reveal cast cards |
 | `#costumes` | 👗 Costumes | **Placeholder** ("coming soon") |
 | `#music` | 🎵 Rehearsal Tracks | Drive audio player + YouTube playlist sub-view |
@@ -88,7 +97,7 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Active rehearsal notices, newest first; each card shows title, type badge, date/time, location, called performers, focus scenes/music, notes (URLs auto-linked).
 - Full-cast calls are visually distinguished.
 - Filter by actor or character name (full-cast/company calls always match).
-- Backend status indicator ("Connected to Google Sheet Backend").
+- Backend status indicator.
 - Collapsible **Archived Rehearsal Notices** vault.
 - **Admin only:** + New Call, ✏️ Edit, 📦 Archive / 🔄 Restore. Edit modal has title, date, call type (list or custom), time, location, performer picker (search, + Full Company, + Principals, + All Ensemble, Clear), focus scenes, notes, archived checkbox. Saves optimistically to local state, then POSTs to backend.
 
@@ -112,9 +121,9 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Lists the playlist in `videosPlaylistId` through the YouTube Data API (`playlistItems.list`) when the tab opens. New entries appear on the next visit, with no code change.
 - Renders a thumbnail grid. The selected video plays in a youtube-nocookie embed. The first entry plays by default.
 - Pages through up to 500 entries (10 pages x 50). Skips hidden or removed entries and any ID that fails the 11-character check.
-- Falls back to the plain playlist embed when `youtubeApiKey` is blank or the API call fails. Shows "coming soon" when `videosPlaylistId` is blank.
+- Fetched through `/api/videos` (`videosApiUrl`); the Lambda holds the YouTube key and caches for 5 minutes. Falls back to the plain playlist embed when the API call fails. Shows "coming soon" when `videosPlaylistId` is blank.
 - Calls the API only while the tab is open.
-- Setup: create a YouTube Data API v3 key, restrict it to your site's referrer and to that API, then set `youtubeApiKey` in `show/show.config.js`.
+- Setup: create a YouTube Data API v3 key restricted to that API only (NO website restriction, requests come from AWS), store it in SSM at `<ParameterPrefix>/youtube-key`. The key is never in the repo or the browser.
 
 ### Master Schedule (`#calendar`)
 - Events from Google Calendar (2 weeks back to ~8 months ahead), grouped by month.
@@ -122,36 +131,40 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - Google Meet links auto-detected and badged; event details modal with Join Meet button.
 - + Add to Google Calendar and Subscribe on iPhone/Mac (webcal ICS) links; Sync button.
 
-## Backend API (Apps Script)
+## Backend APIs
 
-Tab names are in `CONFIG` (`Rehearsals`, `Cast`). Per-show values are **Script Properties**, not code: `ADMIN_PIN` (no PIN set = edits locked), `CALENDAR_ID`, `MUSIC_ROOT_FOLDER_ID`. `setupSheets()` creates both tabs with headers. Calendar sync reads `CALENDAR_ID` the same way.
+### Call board API (AWS, `aws/callboard-api/index.mjs`)
+Same-origin through CloudFront. Settings: `callBoardUrl: "/api/calls"`, `videosApiUrl: "/api/videos"`. See `aws/callboard-api/README.md` for env vars and behaviour.
 
-**GET** `CALLBOARD_BACKEND_URL?action=…` (frontend adds `&t=<timestamp>` cache-buster)
+| Request | Effect |
+|---|---|
+| `GET /api/calls` | `[{id,title,date(YYYY-MM-DD),time,location,type,calledRoles[],focusScenes[],notes,isArchived}]` |
+| `GET /api/videos` | Playlist items (cached 5 min; 502 if nothing cached and Google fails) |
+| `POST {action:"verifyPin", pin}` | success/error; 10 wrong PINs in 15 min locks attempts for 15 min |
+| `POST {action:"save", pin, item}` | Upsert by ID (new ID = `reh-<ms>`); returns `{status, id, sync}` (`sync.unmatched` and `sync.events` drive the app's calendar prompt) |
+| `POST {action:"calendarAttach", pin, id, eventId}` / `calendarCreate` | Writes the call into a calendar event via the Apps Script bridge |
+| `POST {action:"archive"/"delete"/"unarchive", pin, id}` | Sets isArchived; never deletes |
+
+Every POST through CloudFront must carry header `x-amz-content-sha256` (hex SHA-256 of the body); `src/lib/callApi.js` adds it. Secrets live in SSM SecureStrings (created by hand, outside CloudFormation).
+
+### Apps Script (Google, `apps-script/Code.gs` + `calendarSync.gs`)
+Per-show values are **Script Properties**, not code: `CALENDAR_ID`, `MUSIC_ROOT_FOLDER_ID`, `AWS_SYNC_SECRET` (32+ chars, equals the SSM `<ParameterPrefix>/sync-secret`). `setupSheets()` creates the Cast tab.
+
+**GET** `backendUrl?action=…` (frontend adds `&t=<timestamp>` cache-buster)
 | action | Returns |
 |---|---|
-| *(none)* / `getRehearsals` | `[{id,title,date(YYYY-MM-DD),time,location,type,calledRoles[],focusScenes[],notes,isArchived}]` |
 | `getCalendarEvents` | `[{id,title,startTime,endTime(ISO),isAllDay,location,description,meetLink}]` sorted by start |
 | `getMusic` | `{status:"success", tracks:[{id,title,filename,category,previewUrl,downloadUrl}]}` — root folder files = "Practice Tracks", each direct subfolder = its own category (not recursive below one level) |
 | `getCast` | Raw 2D array of the cast sheet (`getValues()`), parsed client-side |
 
-**POST** body is JSON sent as `text/plain`:
-| action | Body | Effect |
-|---|---|---|
-| `verifyPin` | `{pin}` | success/error |
-| `save` | `{pin, item}` | Upsert row in Rehearsals by ID (new ID = `reh-<ms>`). Returns `{status, id, sync}`; `sync.unmatched` lists active calls with no matching calendar event and `sync.events` the day's events, for the app's prompt |
-| `calendarAttach` | `{pin, id, eventId}` | Attaches the call to an existing event on its date. Event time is not changed |
-| `calendarCreate` | `{pin, id}` | Creates a calendar event for the call's time |
-| `archive` / `delete` | `{pin, id}` | Sets IsArchived (col 10) TRUE — never deletes rows |
-| `unarchive` | `{pin, id}` | Sets IsArchived FALSE |
+**POST** (only from the AWS Lambda, authenticated by `secret`): `awsSync {secret, date, calls}`, `awsAttach {secret, id, eventId, calls}`, `awsCreate {secret, id, calls}`. `calls` is the AWS copy of that date's calls, used instead of any Sheet for that one request.
 
-Rehearsals sheet columns: `ID, Title, Date, StartTime, EndTime, Location, Type, CalledRoles, FocusScenes, Notes, IsArchived` (values like `5:30 PM`; lists stored comma-separated; called performers stored as `"Name (Role)"`). Saves write these by position; the archive column is found by header name. Adding or reordering columns needs a matching backend change. Run `setupSheets()` only on a fresh sheet; an existing one needs its header row updated by hand.
-
-**Deploying backend changes:** edit in the Apps Script editor → Deploy → Manage deployments → edit the existing deployment → New version. That keeps the same `/exec` URL. Creating a *new* deployment changes the URL and requires updating `backendUrl` in the show settings.
+**Deploying backend changes:** edit in the Apps Script editor → Deploy → Manage deployments → edit the existing deployment → New version. That keeps the same `/exec` URL. Creating a *new* deployment changes the URL and requires updating `backendUrl` in the show settings and `AppsScriptUrl` in the stack.
 
 ## Gotchas
 
-- **Browser storage is shared by every site on `<user>.github.io`.** All saved data goes through `storageKey()` with the show's `storagePrefix`; never call `localStorage` with a literal key.
-- Auth is a shared PIN sent with every write; fine for a call board, not real security. Never put the PIN in a tracked file.
+- **Browser storage is per origin.** Each show has its own subdomain, but all saved data goes through `storageKey()` with the show's `storagePrefix`; never call `localStorage` with a literal key.
+- Auth is a shared PIN sent with every write (checked in the Lambda, lockout after repeated failures); fine for a call board, not real security. Never put the PIN, bridge secret or YouTube key in a tracked file.
 - Admin edits update local state and `localStorage` before the backend confirms; a failed save alerts, but the local view can differ until refresh.
 - Visitors' cached data can look like stale-backend bugs.
 - `getMusic` reads only one level of subfolders; calendar window is fixed at −14 / +240 days in the script.
@@ -166,7 +179,8 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - **Copy** (engine, identical in both): `src/`, `scripts/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`.
 - **Never copy** (per show): `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
 - **New setting:** add it to the engine with a safe default for blank values, then add it to the template's blank `show/show.config.js` (commented) as well as Frozen's.
-- **Backend:** the template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). Port backend logic changes to them; Frozen's own script is local only (git-ignored, contains its PIN).
+- **Also copy:** `aws/callboard-api/` (Lambda and tests). Frozen's CloudFormation was built by hand; the template's `aws/cloudformation/show-stack.yaml` is for new shows.
+- **Backend:** the template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). Port backend logic changes to them; Frozen's own script is local only (git-ignored, contains its secrets).
 - After copying, `diff -r` the engine paths between the two repos; the only expected difference is none.
 - A settings-only change (new call type, colors, text) stays in the one show.
 
@@ -175,7 +189,7 @@ and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
 - Show-specific change → `show/show.config.js` or `public/`. Engine change → `src/`, and make it in the template too.
 - Adding state or a handler a section needs: declare it in `App.jsx`, add it to `ctx`, destructure it in the section. A missing name is silently `undefined`; type-check or click through to catch it.
 - Never edit `dist/` (generated, git-ignored).
-- Backend changes: edit `apps-script/Code.gs` and `apps-script/calendarSync.gs`; the user pastes them into the Apps Script editor and deploys a **new version of the existing deployment** (keeps the URL).
+- Backend changes: Lambda in `aws/callboard-api/` (run `npm test` there); Google side in `apps-script/Code.gs` and `calendarSync.gs`, which the user pastes into the Apps Script editor and deploys a **new version of the existing deployment** (keeps the URL).
 - **Cloud sessions:** GitHub is the source of truth. Attach this repo, read this file, and work from a clone. Device-shell (Mac) access is only available when a session is linked to the Mac.
 - The cloud workspace can't reach npm but has esbuild at /opt/npm-tools: symlink `node_modules/esbuild` and `node_modules/@esbuild` to it and run `node scripts/build.mjs --cdn-css` for a preview build. Full builds run in GitHub Actions.
 - Regression check for engine refactors: render old and new builds in headless Chromium (Playwright at /opt/npm-tools, browsers at /opt/pw-browsers) with mocked backend responses, click through every page and modal, and diff `#root` HTML. For styling, compare computed styles in the browser pane against the live site.

@@ -35,7 +35,14 @@ module.exports = {
   exampleNumbers: [],
   focusScenesPlaceholder: "e.g., Scene 4, Act 1 Harmonies",
 
+  // ---------------------------------------------------------------- AWS (call board and videos)
+  // This site is served from AWS on its own domain (see aws/README.md). The call board and the
+  // Choreography playlist come from the site's own API, so these two normally stay as they are.
+  callBoardUrl: "/api/calls",            // call board login, list and save (Lambda + DynamoDB)
+  videosApiUrl: "/api/videos",           // Choreography Vault playlist (the YouTube key stays on the server)
+
   // ---------------------------------------------------------------- Google services
+  // Cast, the calendar and the music folder still come from Google, edited by the production team.
   backendUrl: "",                        // TODO Apps Script web app URL ending in /exec
   castCsvUrl: "",                        // optional: Cast tab published to the web as CSV (backup source)
   calendarId: "",                        // TODO public Google Calendar ID (…@group.calendar.google.com)
@@ -43,9 +50,6 @@ module.exports = {
   youtubePlaylistId: "",                 // optional YouTube playlist ID
   videosPlaylistId: "",                  // optional YouTube playlist for the Choreography Vault (must be Public or Unlisted)
   videosPlaylistTitle: "",               // optional title for the Choreography Vault embed
-  // optional YouTube Data API v3 key, restricted to your site's referrer. Lists the Vault playlist
-  // automatically. Leave "" to show the plain playlist embed.
-  youtubeApiKey: "",
   analyticsId: "",                       // optional Google Analytics 4 ID (G-…); "" turns analytics off
 
   // Shown on the music page if the Drive folder can't be loaded. Usually [].

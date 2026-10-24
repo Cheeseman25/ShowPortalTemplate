@@ -1,5 +1,7 @@
-# Builds the site on every push. Pushes to main are deployed to GitHub Pages.
-# One-time setup: repo Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+# Builds the site on every push (a check that it compiles). Deploying to GitHub Pages is OFF by default:
+# the AWS model hosts the site on S3 + CloudFront (see aws/README.md).
+# To also publish on GitHub Pages: repo Settings -> Pages -> Source: "GitHub Actions", then
+# Settings -> Secrets and variables -> Actions -> Variables -> add PAGES_DEPLOY = true.
 name: Build and deploy
 
 on:
@@ -30,7 +32,7 @@ jobs:
           path: dist
 
   deploy:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && vars.PAGES_DEPLOY == 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:
