@@ -1,5 +1,5 @@
 // Root component: owns all state, data loading and handlers; renders the page sections.
-import { SHOW, CALLBOARD_BACKEND_URL, CALL_API_URL, DIRECT_CAST_CSV_URL, FALLBACK_TRACKS, INITIAL_CALL_TYPES, TAB_INFO, DEFAULT_TAB, storageKey } from "./config";
+import { SHOW, CALLBOARD_BACKEND_URL, CALL_API_URL, CAST_SOURCE_URL, noCache, FALLBACK_TRACKS, INITIAL_CALL_TYPES, TAB_INFO, DEFAULT_TAB, storageKey } from "./config";
 import { postCall } from "./lib/callApi";
 import { startSnow } from "./effects/snow";
 import { trackAnalyticsEvent } from "./lib/analytics";
@@ -232,7 +232,7 @@ export function ProductionApp() {
     } catch (err) {}
 
     try {
-      const fallbackRes = await fetch(`${DIRECT_CAST_CSV_URL}&t=${Date.now()}`);
+      const fallbackRes = await fetch(noCache(CAST_SOURCE_URL));
       if (!fallbackRes.ok) throw new Error("Could not fetch Cast spreadsheet.");
       const csvText = await fallbackRes.text();
 

@@ -67,7 +67,7 @@ Follow the Google Sheet, Calendar and Drive steps in the top-level README, then 
 
 ```
 npm install
-npm run build                    # show/show.config.js already points at /api/calls and /api/videos
+npm run build                    # show/show.config.js already points at /api/calls, /api/videos, /api/cast and /api/shows
 ```
 Upload everything in `dist/` to the site bucket (S3 console upload, or presigned URLs), keeping `index.html` and
 `assets/` at the top level. Then invalidate CloudFront (`/*`) so visitors get the new files.

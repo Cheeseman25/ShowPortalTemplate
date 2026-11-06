@@ -3,10 +3,11 @@
 Replaces the Google Sheet "Rehearsals" tab for the call board. Same actions and JSON as the Apps Script
 (`verifyPin`, `save`, `archive`/`unarchive`, `calendarAttach`, `calendarCreate`, plus `GET` list), so the site only
 changes its URL (`callBoardUrl` in the show settings). It also serves `GET /api/videos`, the choreography playlist,
-so the YouTube key never reaches the browser.
+so the YouTube key never reaches the browser. `GET /api/cast` and `GET /api/shows` do the same for the published cast
+sheets: the Lambda fetches the Google CSV link from its settings and returns the CSV, so the link is never in the page code.
 
 ```
-browser --> CloudFront (/api/calls, /api/videos) --> Lambda (function URL, IAM + CloudFront OAC)
+browser --> CloudFront (/api/calls, /api/videos, /api/cast, /api/shows) --> Lambda (function URL, IAM + CloudFront OAC)
                                                       |-- DynamoDB table (calls; "_auth" item = PIN lockout counter)
                                                       |-- SSM Parameter Store SecureStrings (PIN, bridge secret, YouTube key)
                                                       '-- Apps Script bridge (calendar only: awsSync / awsAttach / awsCreate)
@@ -24,6 +25,8 @@ saved date plus a shared secret; Apps Script uses that copy instead of the Sheet
 | `APPS_SCRIPT_URL` | Apps Script `/exec` URL ("" turns the calendar bridge off) |
 | `YT_PARAM` | SSM SecureString name for the YouTube Data API key |
 | `YT_PLAYLIST_ID` | Playlist served at `/api/videos` (fixed here so callers cannot choose another) |
+| `CAST_CSV_URL` | Cast tab published as CSV, served at `/api/cast` (cached 60 s; last good copy served if Google fails; HTML or oversize replies are refused) |
+| `SHOWS_CSV_URL` | Per-show cast tab published as CSV, served at `/api/shows` (same rules) |
 
 Secrets are never in this repo. The YouTube key must be API-restricted to "YouTube Data API v3" and must NOT have a
 website restriction (requests come from AWS, not a browser).

@@ -9,6 +9,8 @@
 //   APPS_SCRIPT_URL   Apps Script web app /exec URL (calendar bridge); "" turns the bridge off
 //   YT_PARAM          SSM SecureString name holding the YouTube Data API key (never sent to browsers)
 //   YT_PLAYLIST_ID    Choreography playlist to list at GET /api/videos (fixed here so callers cannot pick others)
+//   CAST_CSV_URL      Web-published CSV of the cast tab, served at GET /api/cast (the Google link never reaches browsers)
+//   SHOWS_CSV_URL     Web-published CSV of the per-show cast tab, served at GET /api/shows
 
 import { createHash, timingSafeEqual } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
@@ -25,6 +27,15 @@ const VIDEOS_CACHE_MS = 5 * 60 * 1000;  // playlist is cached in memory so page 
 const VIDEOS_MAX_PAGES = 10;            // 10 pages x 50 entries bounds quota use and response size
 const VIDEO_ID_PATTERN = /^[\w-]{11}$/;
 const HIDDEN_TITLES = ["Private video", "Deleted video"];
+const SHEET_CACHE_MS = 60 * 1000;       // published sheets are cached briefly so page views do not each hit Google
+const SHEET_MAX_BYTES = 512 * 1024;     // a cast sheet is a few KB; refuse anything far larger
+const SHEET_ROUTES = { cast: "CAST_CSV_URL", shows: "SHOWS_CSV_URL" };  // route name -> env var holding the Google link
+
+const csv = (body) => ({
+  statusCode: 200,
+  headers: { "content-type": "text/csv; charset=utf-8", "cache-control": "no-store" },
+  body,
+});
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -87,6 +98,7 @@ export function cleanCall(raw, now = Date.now()) {
 export function makeHandler(deps) {
   const { db, getSecrets, getYoutubeKey, fetchImpl, env, log, now } = deps;
   let videosCache = null;   // { at, list }
+  const sheetCache = {};    // route name -> { at, text }
 
   async function listCalls() {
     const items = [];
@@ -140,6 +152,32 @@ export function makeHandler(deps) {
     } catch (err) {
       audit(log, { event: "videos_error", error: String(err && err.message) });
       if (videosCache) return videosCache.list;
+      throw err;
+    }
+  }
+
+  /**
+   * Returns the published CSV for a sheet route ("cast" or "shows"), fetched server-side from the link in
+   * the environment. Cached for SHEET_CACHE_MS; the last good copy is served if Google fails. A response that
+   * is not CSV (for example Google's page for an unpublished tab) is treated as a failure, never passed on.
+   */
+  async function readSheet(name) {
+    const hit = sheetCache[name];
+    if (hit && now() - hit.at < SHEET_CACHE_MS) return hit.text;
+    try {
+      const url = env[SHEET_ROUTES[name]];
+      if (!url) throw new Error(`${SHEET_ROUTES[name]} not set`);
+      const res = await fetchImpl(url, { signal: AbortSignal.timeout(BRIDGE_TIMEOUT_MS) });
+      if (!res.ok) throw new Error(`Google returned ${res.status}`);
+      const type = (res.headers && res.headers.get && res.headers.get("content-type")) || "";
+      if (!type.includes("csv")) throw new Error("Google did not return CSV (tab unpublished?)");
+      const text = await res.text();
+      if (text.length > SHEET_MAX_BYTES) throw new Error("sheet too large");
+      sheetCache[name] = { at: now(), text };
+      return text;
+    } catch (err) {
+      audit(log, { event: "sheet_error", sheet: name, error: String(err && err.message) });
+      if (hit) return hit.text;
       throw err;
     }
   }
@@ -201,6 +239,11 @@ export function makeHandler(deps) {
     const who = event.headers?.["x-forwarded-for"] || event.requestContext?.http?.sourceIp || "unknown";
     try {
       const path = event.rawPath || event.path || "";
+      const sheet = method === "GET" && Object.keys(SHEET_ROUTES).find((name) => path.endsWith("/" + name));
+      if (sheet) {
+        try { return csv(await readSheet(sheet)); }
+        catch { return json(502, { status: "error", message: "Sheet unavailable" }); }
+      }
       if (method === "GET" && path.endsWith("/videos")) {
         try { return json(200, await listVideos()); }
         catch { return json(502, { status: "error", message: "Videos unavailable" }); }

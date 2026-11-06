@@ -44,8 +44,10 @@ module.exports = {
   // ---------------------------------------------------------------- Google services
   // Cast, the calendar and the music folder still come from Google, edited by the production team.
   backendUrl: "",                        // TODO Apps Script web app URL ending in /exec
-  castCsvUrl: "",                        // optional: Cast tab published to the web as CSV (backup source)
-  showsCsvUrl: "",                       // optional: per-show cast tab published to the web as CSV (File > Share > Publish to web > that tab > CSV); needed for the "shows" page
+  castApiUrl: "/api/cast",               // cast tab as CSV, read through this site's API (the Google link lives in the stack's CastCsvUrl)
+  showsApiUrl: "/api/shows",             // per-show cast tab as CSV, same way (stack parameter ShowsCsvUrl); needed for the "shows" page
+  // castCsvUrl / showsCsvUrl: a published link used directly by the browser if you are NOT using the API routes above.
+  // Avoid them on a public repo: the link would be readable by anyone.
   calendarId: "",                        // TODO public Google Calendar ID (…@group.calendar.google.com)
   musicFolderUrl: "",                    // TODO Drive music folder share link
   youtubePlaylistId: "",                 // optional YouTube playlist ID
@@ -58,7 +60,7 @@ module.exports = {
 
   // ---------------------------------------------------------------- features
   // Pages shown in the menu, in order. Available: callboard, cast, shows, costumes, music, videos, calendar.
-  // "shows" (Show Casts: who is in which show) also needs showsCsvUrl and showSchedule below.
+  // "shows" (Show Casts: who is in which show) also needs the stack's ShowsCsvUrl and showSchedule below.
   tabs: ["callboard", "cast", "costumes", "music", "videos", "calendar"],
 
   // Show dates and times for the "shows" page, in the same order as the show blocks in the sheet tab.

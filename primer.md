@@ -29,7 +29,7 @@ Browser also calls the Apps Script web app (backendUrl …/exec), bound to the s
    ├── Google Calendar (Script Property CALENDAR_ID) → season schedule (read)
    └── Drive folder (Script Property MUSIC_ROOT_FOLDER_ID) + subfolders → audio tracks (read)
 
-Fallback: cast also loads from a published-to-web CSV of the Cast tab (castCsvUrl) if the backend fails.
+Fallback: cast also loads from a published-to-web CSV of the Cast tab if the backend fails. On AWS the browser asks `GET /api/cast` (setting `castApiUrl`); the Lambda fetches the Google link from its `CAST_CSV_URL` setting, so the link is never in the page code or the repo. `castCsvUrl` is the direct-link alternative for sites with no API; it exposes the link.
 ```
 
 **Build:** `npm run build` (scripts/build.mjs) bundles `src/main.jsx` with esbuild into one minified `assets/app-<hash>.js`, compiles Tailwind v3 + `src/styles.css` into `assets/styles-<hash>.css`, fills `src/index.html` placeholders (`{{pageTitle}}`, `{{icon}}`, languages, `<!--ANALYTICS-->`) from the show settings, and copies `public/` into `dist/`. React 18.3.1 / ReactDOM load as global UMD scripts from unpkg; canvas-confetti, Google Translate, GA4 and Google Fonts from CDNs.
@@ -111,7 +111,7 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 ### Show Casts (`#shows`) — optional
 For shows with several performances and different casts per performance. Off unless `"shows"` is in `tabs`.
 - Four views over one table: **Grid** (characters down the left in sheet order = billing order, one column per show with date and time, actor names in the cells), **By Show** (full cast), **By Performer** (their roles in each show, plus a "who am I on stage with" shortcut), **Together** (shows shared by one or more chosen performers, "all together" or "any of them"). It deliberately shows no per-person show totals.
-- Data: one sheet tab, web-published as CSV (`showsCsvUrl`). Row 1 = show labels, row 2 = headings, then a `Character` + `Actor` column pair per show side by side with a blank spacer column. Rows are matched by position, so repeated roles (Chorus) stay separate rows. A person with two roles in one show appears once per show in the person-based views. Use the same full name everywhere.
+- Data: one sheet tab, web-published as CSV and read through `GET /api/shows` (`showsApiUrl`; the Lambda holds the link in `SHOWS_CSV_URL`, stack parameter `ShowsCsvUrl`). Row 1 = show labels, row 2 = headings, then a `Character` + `Actor` column pair per show side by side with a blank spacer column. Rows are matched by position, so repeated roles (Chorus) stay separate rows. A person with two roles in one show appears once per show in the person-based views. Use the same full name everywhere.
 - Dates and times come from the `showSchedule` setting (`[{ label, week, date, time }]`, matched to the sheet blocks by order). Missing entries fall back to the sheet's own header text.
 - Code: `src/tabs/ShowsTab.jsx`, `src/lib/shows.js`. The browser reads the published CSV directly; no backend action is needed. Published tabs are public, so keep contact details out of them.
 

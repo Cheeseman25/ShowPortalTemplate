@@ -1,8 +1,8 @@
 // #shows: who is in which of the six shows. Four views over one table:
 // Grid, By Show (full cast), By Performer (their shows), Together (shows shared by chosen performers).
-// Reads the per-show cast tab from its web-published CSV link (setting showsCsvUrl).
+// Reads the per-show cast tab as CSV from showsApiUrl (server route) or showsCsvUrl (published link).
 
-import { SHOWS_CSV_URL, SHOW_SCHEDULE, storageKey } from "../config";
+import { SHOWS_SOURCE_URL, SHOW_SCHEDULE, noCache, storageKey } from "../config";
 import { parseCsv, parseShowRows, indexAssignments, buildCharacterRows, togetherByShow } from "../lib/shows";
 
 const { useState, useMemo, useEffect } = React;
@@ -65,11 +65,11 @@ export function ShowsTab({ ctx }) {
 
   // Fetches the sheet the first time the tab opens; keeps the cached copy if the fetch fails.
   useEffect(() => {
-    if (activeTab !== 'shows' || !SHOWS_CSV_URL) return;
+    if (activeTab !== 'shows' || !SHOWS_SOURCE_URL) return;
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`${SHOWS_CSV_URL}&t=${Date.now()}`);
+        const res = await fetch(noCache(SHOWS_SOURCE_URL));
         if (!res.ok) throw new Error('bad response');
         const parsed = parseShowRows(parseCsv(await res.text()), SHOW_SCHEDULE);
         if (parsed.shows.length === 0) throw new Error('no shows found');

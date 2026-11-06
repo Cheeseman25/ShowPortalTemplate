@@ -33,7 +33,7 @@ About an hour. Do the Google steps first (the website settings need values from 
 5. **Deploy -> New deployment -> Web app.** Execute as: **Me**. Who has access: **Anyone**. Copy the
    **Web app URL** (ends in `/exec`). This is `backendUrl`.
    - Later changes: **Deploy -> Manage deployments -> pencil -> Version: New version** keeps the same URL.
-6. Optional backup cast source: **File -> Share -> Publish to web**, choose the **Cast** tab and **CSV**, and copy the link (`castCsvUrl`).
+6. Optional cast source for the site: **File -> Share -> Publish to web**, choose the **Cast** tab and **CSV**, and copy the link. It goes in the stack's `CastCsvUrl` parameter, not in this repo: the site reads it through `/api/cast`, so the link never reaches visitors. For the Show Casts page do the same with the per-show tab and `ShowsCsvUrl`.
 
 **Cast tab format:** one row per role. Columns: `Category` (Principal, Featured Ensemble, Ensemble...),
 `Role`, then one column per cast. If your casts have names (e.g. "Red Cast" / "Blue Cast"), put those
@@ -60,7 +60,7 @@ words in `castColumnKeywords`.
 1. On this template's GitHub page: **Use this template -> Create a new repository.** Name it after the show (e.g. `Seussical2027`).
 2. Fill in [`show/show.config.js`](show/show.config.js). Set a unique `storagePrefix` first.
    Images (logo, show artwork) go in `public/` and are referenced by file name, e.g. `logoUrl: "logo.png"`.
-   Leave `callBoardUrl` and `videosApiUrl` as they are (they are same-site paths).
+   Leave `callBoardUrl`, `videosApiUrl`, `castApiUrl` and `showsApiUrl` as they are (they are same-site paths).
 
 ### 5. AWS hosting
 

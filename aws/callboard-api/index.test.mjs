@@ -196,3 +196,55 @@ test("videos: serves the last good list if YouTube fails, 502 with no detail if 
   assert.equal(r.statusCode, 502);
   assert.ok(!r.body.includes("403"));
 });
+
+// ---------- published sheets (cast, shows) ----------
+const csvRes = (text, type = "text/csv; charset=utf-8", ok = true, status = 200) => ({ ok, status, headers: { get: () => type }, text: async () => text });
+const getSheet = (s, name) => s.h({ requestContext: { http: { method: "GET" } }, rawPath: "/api/" + name, headers: {} });
+const SHEET_ENV = { CAST_CSV_URL: "https://docs.google.com/pub-cast", SHOWS_CSV_URL: "https://docs.google.com/pub-shows" };
+
+test("sheets: serves the CSV from the server-side link and never reveals the link", async () => {
+  const seen = [];
+  const s = setup({ env: SHEET_ENV, fetchImpl: async (u) => { seen.push(u); return csvRes("Character,Actor\nAnna,Test"); } });
+  const cast = await getSheet(s, "cast"), shows = await getSheet(s, "shows");
+  assert.equal(cast.statusCode, 200);
+  assert.match(cast.headers["content-type"], /text\/csv/);
+  assert.equal(cast.body, "Character,Actor\nAnna,Test");
+  assert.deepEqual(seen, ["https://docs.google.com/pub-cast", "https://docs.google.com/pub-shows"]);
+  assert.ok(!cast.body.includes("docs.google.com") && !JSON.stringify(cast.headers).includes("docs.google.com"));
+  assert.equal(shows.statusCode, 200);
+});
+
+test("sheets: the link comes from settings, not the request", async () => {
+  let url;
+  const s = setup({ env: SHEET_ENV, fetchImpl: async (u) => { url = u; return csvRes("a"); } });
+  await s.h({ requestContext: { http: { method: "GET" } }, rawPath: "/api/cast", rawQueryString: "url=https://evil.example", queryStringParameters: { url: "https://evil.example" }, headers: {} });
+  assert.equal(url, "https://docs.google.com/pub-cast");
+});
+
+test("sheets: cached for a minute, refreshed after, last good copy served if Google fails", async () => {
+  let calls = 0, fail = false;
+  const s = setup({ env: SHEET_ENV, fetchImpl: async () => { calls++; return fail ? csvRes("", "text/html", false, 500) : csvRes("v" + calls); } });
+  await getSheet(s, "cast"); await getSheet(s, "cast");
+  assert.equal(calls, 1);
+  s.tick(61 * 1000); fail = true;
+  const r = await getSheet(s, "cast");
+  assert.equal(r.statusCode, 200);
+  assert.equal(r.body, "v1");
+});
+
+test("sheets: an unpublished tab (HTML page), a missing link or an oversize sheet gives a generic 502", async () => {
+  const html = setup({ env: SHEET_ENV, fetchImpl: async () => csvRes("<html>secret page</html>", "text/html; charset=utf-8") });
+  const a = await getSheet(html, "cast");
+  assert.equal(a.statusCode, 502);
+  assert.ok(!a.body.includes("secret page") && !a.body.includes("docs.google.com"));
+  const none = setup({ env: {} });
+  assert.equal((await getSheet(none, "shows")).statusCode, 502);
+  const big = setup({ env: SHEET_ENV, fetchImpl: async () => csvRes("x".repeat(600 * 1024)) });
+  assert.equal((await getSheet(big, "cast")).statusCode, 502);
+});
+
+test("sheets: only GET is served", async () => {
+  const s = setup({ env: SHEET_ENV, fetchImpl: async () => csvRes("a") });
+  const r = await s.h({ requestContext: { http: { method: "POST" } }, rawPath: "/api/cast", body: "{}", headers: {} });
+  assert.notEqual(r.body, "a");
+});
