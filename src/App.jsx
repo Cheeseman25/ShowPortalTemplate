@@ -12,6 +12,7 @@ import { Header } from "./components/Header";
 import { NavBar } from "./components/NavBar";
 import { CallBoardTab } from "./tabs/CallBoardTab";
 import { CastTab } from "./tabs/CastTab";
+import { ShowsTab } from "./tabs/ShowsTab";
 import { CostumesTab } from "./tabs/CostumesTab";
 import { MusicTab } from "./tabs/MusicTab";
 import { VideosTab } from "./tabs/VideosTab";
@@ -783,6 +784,7 @@ export function ProductionApp() {
         <NavBar ctx={ctx} />
         <CallBoardTab ctx={ctx} />
         <CastTab ctx={ctx} />
+        <ShowsTab ctx={ctx} />
         <CostumesTab ctx={ctx} />
         <MusicTab ctx={ctx} />
         <VideosTab ctx={ctx} />

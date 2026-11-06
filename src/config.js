@@ -20,11 +20,16 @@ export const DIRECT_CAST_CSV_URL = SHOW.castCsvUrl;
 export const GOOGLE_DRIVE_MUSIC_FOLDER_URL = SHOW.musicFolderUrl;
 export const FALLBACK_TRACKS = SHOW.fallbackTracks || [];
 export const INITIAL_CALL_TYPES = SHOW.callTypes;
+// Published CSV of the sheet tab holding each show's cast (Character/Actor blocks side by side).
+export const SHOWS_CSV_URL = SHOW.showsCsvUrl || "";
+// Dates and times of each show, matched by order to the blocks in the Shows sheet tab.
+export const SHOW_SCHEDULE = SHOW.showSchedule || [];
 
 // Every page the engine knows how to render. Each key is a #hash route.
 const ALL_TABS = {
   callboard: { label: 'Call Board & Schedule', icon: '📅', path: 'callboard' },
   cast: { label: 'Cast Members', icon: '🎭', path: 'cast' },
+  shows: { label: 'Show Casts', icon: '🎟️', path: 'shows' },
   costumes: { label: 'Costumes', icon: '👗', path: 'costumes' },
   music: { label: 'Rehearsal Tracks', icon: '🎵', path: 'music' },
   videos: { label: 'Choreography Vault', icon: '🎬', path: 'videos' },

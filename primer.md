@@ -71,6 +71,7 @@ Hash-based routing on a single page. `TAB_INFO` is the route table; `getInitialT
 |---|---|---|
 | `#callboard` | 📅 Call Board & Schedule | Rehearsal call notices from the AWS call board API |
 | `#cast` | 🎭 Cast Members | Mystery reveal cast cards |
+| `#shows` | 🎟️ Show Casts | Who is in which show (optional; add `"shows"` to `tabs`) |
 | `#costumes` | 👗 Costumes | **Placeholder** ("coming soon") |
 | `#music` | 🎵 Rehearsal Tracks | Drive audio player + YouTube playlist sub-view |
 | `#videos` | 🎬 Choreography Vault | Thumbnail picker over the choreography YouTube playlist (see section below) |
@@ -106,6 +107,13 @@ A breadcrumb bar shows the current route and has a **Copy Direct Link** button t
 - **Mystery reveal cards**: each performer's role is hidden until tapped; tapping opens a celebration modal with confetti and a synthesized fanfare (Web Audio). Reveal All / Re-hide All.
 - Search by performer or character; category filter chips (All Cast A–Z, Principal, Featured Ensemble, Ensemble).
 - Refresh Cast button. Cast parsed by `processCastRows()`: finds columns by header keywords (category/type/group/tier; role/character/part; first cast = `castColumnKeywords.first` + cast a/actor/name; second cast = `castColumnKeywords.second` + cast b), drops "TBD", merges an actor's multiple roles into one card.
+
+### Show Casts (`#shows`) — optional
+For shows with several performances and different casts per performance. Off unless `"shows"` is in `tabs`.
+- Four views over one table: **Grid** (characters down the left in sheet order = billing order, one column per show with date and time, actor names in the cells), **By Show** (full cast), **By Performer** (their roles in each show, plus a "who am I on stage with" shortcut), **Together** (shows shared by one or more chosen performers, "all together" or "any of them"). It deliberately shows no per-person show totals.
+- Data: one sheet tab, web-published as CSV (`showsCsvUrl`). Row 1 = show labels, row 2 = headings, then a `Character` + `Actor` column pair per show side by side with a blank spacer column. Rows are matched by position, so repeated roles (Chorus) stay separate rows. A person with two roles in one show appears once per show in the person-based views. Use the same full name everywhere.
+- Dates and times come from the `showSchedule` setting (`[{ label, week, date, time }]`, matched to the sheet blocks by order). Missing entries fall back to the sheet's own header text.
+- Code: `src/tabs/ShowsTab.jsx`, `src/lib/shows.js`. The browser reads the published CSV directly; no backend action is needed. Published tabs are public, so keep contact details out of them.
 
 ### Costumes (`#costumes`) — placeholder only.
 

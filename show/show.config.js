@@ -45,6 +45,7 @@ module.exports = {
   // Cast, the calendar and the music folder still come from Google, edited by the production team.
   backendUrl: "",                        // TODO Apps Script web app URL ending in /exec
   castCsvUrl: "",                        // optional: Cast tab published to the web as CSV (backup source)
+  showsCsvUrl: "",                       // optional: per-show cast tab published to the web as CSV (File > Share > Publish to web > that tab > CSV); needed for the "shows" page
   calendarId: "",                        // TODO public Google Calendar ID (…@group.calendar.google.com)
   musicFolderUrl: "",                    // TODO Drive music folder share link
   youtubePlaylistId: "",                 // optional YouTube playlist ID
@@ -56,8 +57,13 @@ module.exports = {
   fallbackTracks: [],
 
   // ---------------------------------------------------------------- features
-  // Pages shown in the menu, in order. Available: callboard, cast, costumes, music, videos, calendar.
+  // Pages shown in the menu, in order. Available: callboard, cast, shows, costumes, music, videos, calendar.
+  // "shows" (Show Casts: who is in which show) also needs showsCsvUrl and showSchedule below.
   tabs: ["callboard", "cast", "costumes", "music", "videos", "calendar"],
+
+  // Show dates and times for the "shows" page, in the same order as the show blocks in the sheet tab.
+  // Example: { label: "Show 1", week: 1, date: "Fri 8 Jan", time: "6:30 PM" }. Leave [] if you do not use the page.
+  showSchedule: [],
 
   // Choices in the staff "New Rehearsal Call" form (staff can also type a custom one).
   callTypes: [
