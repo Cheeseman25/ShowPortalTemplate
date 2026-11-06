@@ -5,20 +5,19 @@ Read `primer.md` first: architecture, pages, settings, backend API and workflow.
 ## Before editing: start from the latest GitHub copy
 
 GitHub `main` is the source of truth. At the start of every task, before changing anything:
-1. `git fetch` + fast-forward to `origin/main` in the clone being edited (both repos when the engine is involved).
-2. Check the Mac copy (`~/Development/FrozenJR2026`, via the device shell) for uncommitted or unpushed work. If there is any, ask the user before doing anything else; never overwrite it.
+1. `git fetch` + fast-forward to `origin/main` in the clone being edited.
+2. Check the local copy of this repo for uncommitted or unpushed work. If there is any, ask the user before doing anything else; never overwrite it.
 3. Only then edit.
 
-## Keep the engine in sync (Frozen ⇄ template)
+## Show repos and the template
 
-Engine changes are made in BOTH repos in the same session, as separate commits:
-`Cheeseman25/FrozenJR2026` (the running show, where changes are tested with real data)
-and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
+This repo is the template for future shows. Each show is its own repo created from it ("Use this template"). The engine is shared; the show is settings.
 
-- **Copy** (engine, identical in both): `src/`, `scripts/`, `aws/callboard-api/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`.
-- **Never copy** (per show): `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
-- **New setting:** add it to the engine with a safe default for blank values, then add it to the template's blank `show/show.config.js` (commented) as well as Frozen's.
-- **Backend:** the template's `apps-script/Code.gs` is the generic version (settings in Script Properties). Port backend logic changes to it; Frozen's own script is local only (git-ignored, contains its secrets).
-- **Hosting is AWS only** (S3 + CloudFront + Lambda + DynamoDB); see `aws/README.md`. Never commit secrets (PIN, bridge secret, YouTube key); they live in SSM.
-- After copying, `diff -r` the engine paths between the two repos; the only expected difference is none.
-- A settings-only change (new call type, colors, text) stays in the one show.
+- **Engine** (same in the template and every show): `src/`, `scripts/`, `aws/callboard-api/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`.
+- **Per show** (never copied between repos): `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
+- **Engine change made in a show repo:** make the same change in the template repo in the same session, as a separate commit, so the next show gets it. Then `diff -r` the engine paths between the two repos; the expected difference is none. Past shows keep their copy and take a fix by copying the affected files.
+- **New setting:** add it to the engine with a safe default for blank values, then add it, blank and commented, to the template's `show/show.config.js`.
+- **Backend:** the template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). Port backend logic changes to them. A show's own deployed script is local only (git-ignored, contains its secrets).
+- A settings-only change (new call type, colors, text, dates) stays in the one show.
+- **Hosting is AWS only** (S3 + CloudFront + Lambda + DynamoDB); see `aws/README.md`.
+- **Never commit** secrets (PIN, bridge secret, YouTube key), published-sheet links, or real cast names. Secrets live in SSM; sheet links go in the stack parameters `CastCsvUrl` / `ShowsCsvUrl` and are served through `/api/cast` and `/api/shows`.

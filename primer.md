@@ -9,7 +9,7 @@ A single-page **production portal and call board** for a theatre production. Fam
 
 **Hosting model: AWS only.** The site is on S3 + CloudFront, the call board is a Lambda + DynamoDB API, and Google (Sheet, Calendar, Drive) still holds the cast list, schedule and music so non-technical partners can edit them. The older GitHub-Pages-plus-Sheet call board is no longer supported by the template.
 
-- **Template repo:** `Cheeseman25/ShowPortalTemplate`. Each show is its own repo created from it ("Use this template"), served at its own subdomain named show+year, e.g. `https://seussical2027.ttsplayershaverhillbradford.com` (one subdomain per show so each show has its own browser-storage origin).
+- **Template repo:** `Cheeseman25/ShowPortalTemplate` (private). Each show is its own repo created from it ("Use this template"), served at its own subdomain named show+year, e.g. `https://seussical2027.ttsplayershaverhillbradford.com` (one subdomain per show so each show has its own browser-storage origin).
 - **Engine vs show:** everything show-specific is in `show/show.config.js` (+ images in `public/`). `src/` is the shared engine; keep show-specific text, colors and IDs out of it.
 - Engine improvements go into the template first. Past shows keep their copy; port a change by copying the affected `src/` files.
 
@@ -178,19 +178,15 @@ Per-show values are **Script Properties**, not code: `CALENDAR_ID`, `MUSIC_ROOT_
 - `getMusic` reads only one level of subfolders; calendar window is fixed at −14 / +240 days in the script.
 - Cast data contains students' names: keep it in the Sheet, never hardcoded in the repo.
 
-## Keep the engine in sync (Frozen ⇄ template)
+## Show repos and the template
 
-Engine changes are made in BOTH repos in the same session, as separate commits:
-`Cheeseman25/FrozenJR2026` (the running show, where changes are tested with real data)
-and `Cheeseman25/ShowPortalTemplate` (the starting point for future shows).
-
-- **Copy** (engine, identical in both): `src/`, `scripts/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`.
-- **Never copy** (per show): `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
-- **New setting:** add it to the engine with a safe default for blank values, then add it to the template's blank `show/show.config.js` (commented) as well as Frozen's.
-- **Also copy:** `aws/callboard-api/` (Lambda and tests). Frozen's CloudFormation was built by hand; the template's `aws/cloudformation/show-stack.yaml` is for new shows.
-- **Backend:** the template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). Port backend logic changes to them; Frozen's own script is local only (git-ignored, contains its secrets).
-- After copying, `diff -r` the engine paths between the two repos; the only expected difference is none.
-- A settings-only change (new call type, colors, text) stays in the one show.
+This repo is the template; each show is its own repo created from it. Rules are in `CLAUDE.md`. In short:
+- **Engine** (same everywhere): `src/`, `scripts/`, `aws/callboard-api/`, `tailwind.config.js`, `package.json` devDependencies, `.github/workflows/`. **Per show:** `show/show.config.js`, `public/`, `music/`, `primer.md`, `README.md`.
+- An engine change made in a show repo is made in the template in the same session (separate commit); then `diff -r` the engine paths, expecting no difference.
+- New settings get a safe default in the engine and a blank, commented line in the template's `show/show.config.js`.
+- The template's `aws/cloudformation/show-stack.yaml` creates a show's AWS resources. A show built before the stack existed may have hand-built resources.
+- The template's `apps-script/Code.gs` and `calendarSync.gs` are the generic versions (settings in Script Properties). A show's own deployed script is local only.
+- A settings-only change (call types, colors, text, dates) stays in the one show.
 
 ## Workflow notes for Claude
 
