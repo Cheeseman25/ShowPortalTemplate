@@ -152,7 +152,7 @@ export function ShowsTab({ ctx }) {
               </thead>
               <tbody>
                 {gridRows.map((c) => (
-                  <tr key={c.row} className="border-t border-slate-800/80">
+                  <tr key={c.key} className="border-t border-slate-800/80">
                     <td className="p-2 sticky left-0 bg-slate-900 z-10 font-bold text-primary-300 min-w-[7rem]">{c.role}</td>
                     {shows.map((s) => {
                       const name = c.byShow[s.id];

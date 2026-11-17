@@ -68,16 +68,61 @@ export function parseShowRows(rows, schedule = []) {
   return { shows, assignments };
 }
 
+// Regroups the sheet rows of one repeated role (such as "Chorus") into lines where each actor
+// sits on exactly one line. Why: the sheet may enter the same chorus actor on a different row in
+// each show; the grid must show that actor on one line. Actors in the most shows are placed
+// first; each takes the first line where none of their shows is already filled, so alternating
+// casts share a line. Returns lines as { row, byShow }, in order of first appearance in the sheet.
+function mergeRepeatedRole(roleRows) {
+  const actors = new Map();  // lowercase name -> { name, shows: {showId -> true}, firstRow }
+  roleRows.forEach(({ row, byShow }) => {
+    Object.entries(byShow).forEach(([show, name]) => {
+      const key = name.toLowerCase();
+      if (!actors.has(key)) actors.set(key, { name, shows: {}, firstRow: row });
+      const a = actors.get(key);
+      a.shows[show] = true;
+      a.firstRow = Math.min(a.firstRow, row);
+    });
+  });
+  const ordered = [...actors.values()].sort((a, b) =>
+    Object.keys(b.shows).length - Object.keys(a.shows).length || a.firstRow - b.firstRow);
+
+  const lines = [];
+  ordered.forEach((actor) => {
+    let line = lines.find((l) => Object.keys(actor.shows).every((s) => !l.byShow[s]));
+    if (!line) { line = { row: actor.firstRow, byShow: {} }; lines.push(line); }
+    Object.keys(actor.shows).forEach((s) => { line.byShow[s] = actor.name; });
+    line.row = Math.min(line.row, actor.firstRow);
+  });
+  return lines.sort((a, b) => a.row - b.row);
+}
+
 // Character rows in sheet (billing) order for the grid:
-// [{ row, role, byShow: { showId -> actor name } }]. Rows are matched by sheet position, so a
-// repeated role such as "Chorus" stays as separate rows.
+// [{ key, row, role, byShow: { showId -> actor name } }].
+// Every assignment keeps its own role and show exactly as the sheet states them; only the line it
+// is drawn on can change. The sheet's role label can differ between show blocks on the same row
+// (row 42 may be "Snow Ballet" in show 1 and "Sun Chorus" in show 4), so lines are built per role,
+// never per sheet row. A role found on one sheet row keeps that row. A role repeated on several
+// rows (Chorus, Sun Chorus...) is consolidated opportunistically so an actor sits on one line.
+// Roles match ignoring case and extra spaces.
 export function buildCharacterRows(assignments) {
-  const rows = new Map();
+  const roles = new Map();  // normalized role -> { role, rows: Map(sheet row -> { row, byShow }) }
   assignments.forEach(({ show, role, name, row }) => {
-    if (!rows.has(row)) rows.set(row, { row, role, byShow: {} });
+    const k = role.toLowerCase();
+    if (!roles.has(k)) roles.set(k, { role, rows: new Map() });
+    const rows = roles.get(k).rows;
+    if (!rows.has(row)) rows.set(row, { row, byShow: {} });
     rows.get(row).byShow[show] = name;
   });
-  return [...rows.values()].sort((a, b) => a.row - b.row);
+
+  const out = [];
+  roles.forEach(({ role, rows }) => {
+    const sheetRows = [...rows.values()].sort((a, b) => a.row - b.row);
+    const lines = sheetRows.length > 1 ? mergeRepeatedRole(sheetRows) : sheetRows;
+    lines.forEach((l) => out.push({ row: l.row, role, byShow: l.byShow }));
+  });
+  out.sort((a, b) => a.row - b.row);
+  return out.map((r, i) => ({ ...r, key: i }));
 }
 
 // Builds { byShow, byPerson, people } from shows + assignments.
